@@ -1,15 +1,18 @@
 """
-Agent Types Enum.
+Agent Types Module
 
-This module defines the different types of agents available in the system.
+This module defines the AgentType enum to avoid circular imports between agent modules.
 """
 
-from enum import Enum, auto
+from enum import Enum
 
 
-class AgentType(Enum):
-    """Enum representing the different types of agents in the system."""
-    ROOT = auto()
-    BAT_CUC_LINH_SO = auto()
-    PAYMENT = auto()
-    USER = auto() 
+class AgentType(str, Enum):
+    """Các loại agent trong hệ thống"""
+    ROOT = "root"
+    BAT_CUC_LINH_SO = "batcuclinh_so"
+    PAYMENT = "payment"
+    USER = "user"
+
+    def __str__(self):
+        return self.value 

@@ -1,406 +1,1013 @@
 """
-Main Entry Point
+Main FastAPI Application Module - Simple Version
 
-Điểm vào chính của ứng dụng Phong Thủy Số.
+This module initializes a simple FastAPI application for Phong Thuy So
 """
 
-import os
-import sys
-import argparse
+import json
 import logging
-from typing import Dict, Optional, Any
+import os
+import uuid
+from datetime import datetime
+from typing import Any, Dict, List, Optional, Enum
 
-from dotenv import load_dotenv
-import google.generativeai as genai
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-import uvicorn
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Query, Request, UploadFile, Depends, Header
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel, EmailStr
 
-# Import the root agent instance directly
-from python_adk.agents import root_agent
-from python_adk.shared_libraries.logger import get_logger
+# Khởi tạo các biến môi trường
+env_mode = os.environ.get("ENV_MODE", "dev")
+port = int(os.environ.get("PORT", 8000))
+
+# Cấu hình logging
+logging.basicConfig(
+    level=logging.INFO if env_mode == "prod" else logging.DEBUG,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 # Khởi tạo ứng dụng FastAPI
 app = FastAPI(
-    title="Phong Thủy Số API",
-    description="API cho ứng dụng phân tích phong thủy số học",
-    version="0.1.0"
+    title="Phong Thuy API",
+    description="API for Phong Thuy So Bot",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
 )
 
-def configure_logging():
-    """Cấu hình logging cho ứng dụng"""
-    log_dir = "logs"
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
-        
-    # Cấu hình cơ bản cho logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(os.path.join(log_dir, "app.log")),
-            logging.StreamHandler(sys.stdout)
-        ]
-    )
+# Cấu hình CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
+# Thiết lập OAuth2
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/user/token")
 
-def configure_gemini(api_key: Optional[str] = None):
-    """
-    Cấu hình Gemini API
+# Thêm static files và templates
+templates_path = os.path.join(os.path.dirname(__file__), "templates")
+static_path = os.path.join(os.path.dirname(__file__), "static")
+
+try:
+    app.mount("/static", StaticFiles(directory=static_path), name="static")
+    templates = Jinja2Templates(directory=templates_path)
+    logger.info(f"Mounted static files from {static_path} and templates from {templates_path}")
+except Exception as e:
+    logger.warning(f"Could not mount static files: {e}")
+    templates = None
+
+# Tạo thư mục uploads nếu chưa tồn tại
+uploads_path = os.path.join(static_path, "uploads")
+os.makedirs(uploads_path, exist_ok=True)
+
+# Models
+class ProcessMessageRequest(BaseModel):
+    """Request model for processing a message."""
     
-    Args:
-        api_key (Optional[str]): API key cho Gemini, nếu không cung cấp sẽ lấy từ môi trường
-    """
-    # Lấy API key từ môi trường nếu không được cung cấp
-    if not api_key:
-        # Ưu tiên lấy từ GOOGLE_API_KEY
-        api_key = os.getenv("GOOGLE_API_KEY")
-        
-        # Nếu không tìm thấy, thử lấy từ GEMINI_API_KEY
-        if not api_key:
-            api_key = os.getenv("GEMINI_API_KEY")
-        
-    if not api_key:
-        raise ValueError("Không tìm thấy API key. Vui lòng cung cấp GOOGLE_API_KEY hoặc GEMINI_API_KEY trong môi trường hoặc trực tiếp.")
+    message: str
+    context: Optional[Dict[str, Any]] = None
+
+
+class ProcessMessageResponse(BaseModel):
+    """Response model for a processed message."""
     
-    # Cấu hình Gemini
-    genai.configure(api_key=api_key)
+    agent: str
+    status: str
+    content: str
+    metadata: Optional[Dict[str, Any]] = None
 
 
-def run_interactive_shell(model_name: str):
-    """
-    Chạy shell tương tác với agent
+class ChatRequest(BaseModel):
+    """Request model for chat."""
     
-    Args:
-        model_name (str): Tên model Gemini sử dụng
-    """
-    logger = get_logger("InteractiveShell")
-    logger.info(f"Khởi động shell tương tác với model {model_name}")
+    message: str
+    context: Optional[Dict[str, Any]] = None
+
+
+class ChatResponse(BaseModel):
+    """Response model for chat."""
     
-    # Sử dụng root_agent đã được khởi tạo
-    # Lưu ý: model_name từ command line hiện không được sử dụng để cấu hình lại root_agent
-    # Nếu cần cấu hình model động, cần cơ chế khác.
+    agent: str
+    status: str
+    content: str
+    metadata: Optional[Dict[str, Any]] = None
+    is_final: bool = True
+
+
+# User Models
+class UserBase(BaseModel):
+    """Base user model."""
     
-    print("\n===== Phong Thủy Số - Interactive Shell =====")
-    print("Nhập 'exit' hoặc 'quit' để thoát\n")
+    email: EmailStr
+    fullname: str
+
+
+class UserCreate(UserBase):
+    """Model for user creation."""
     
-    while True:
-        try:
-            # Nhận input từ người dùng
-            user_input = input("\nBạn: ")
-            
-            # Kiểm tra thoát
-            if user_input.lower() in ["exit", "quit", "q"]:
-                print("Tạm biệt!")
-                break
-            
-            # Xử lý input với Root Agent (instance đã import)
-            # Lưu ý: Phương thức 'run' không tồn tại trên GeminiAgent, sử dụng 'invoke'
-            # Xử lý input với Root Agent
-            response = root_agent.invoke(user_input)
-            
-            # Hiển thị phản hồi
-            print(f"\nPhong Thủy Số: {response}")
-            
-        except KeyboardInterrupt:
-            print("\nTạm biệt!")
-            break
-        except Exception as e:
-            logger.error(f"Lỗi: {e}")
-            print(f"\nCó lỗi xảy ra: {e}")
+    password: str
 
 
-def parse_arguments():
-    """
-    Parse command line arguments
+class UserUpdate(BaseModel):
+    """Model for user update."""
     
-    Returns:
-        argparse.Namespace: Parsed arguments
-    """
-    parser = argparse.ArgumentParser(description="Phong Thủy Số - Ứng dụng phân tích phong thủy số học")
+    fullname: Optional[str] = None
+    email: Optional[EmailStr] = None
+    password: Optional[str] = None
+
+
+class User(UserBase):
+    """User model."""
     
-    parser.add_argument(
-        "--model", 
-        type=str, 
-        default="gemini-1.5-pro",
-        help="Model Gemini sử dụng (mặc định: gemini-1.5-pro)"
-    )
+    id: str
+    created_at: datetime
+    updated_at: datetime
+    is_active: bool
+    is_premium: bool
+    quota_remaining: int
     
-    parser.add_argument(
-        "--api-key", 
-        type=str, 
-        help="Google API key cho Gemini (nếu không cung cấp, sẽ lấy từ GOOGLE_API_KEY hoặc GEMINI_API_KEY trong môi trường)"
-    )
+    class Config:
+        orm_mode = True
+
+
+class TokenData(BaseModel):
+    """Token data model."""
     
-    return parser.parse_args()
+    username: str
+    exp: Optional[int] = None
 
 
-def main():
-    """Main entry point của ứng dụng"""
-    # Load environment variables
-    load_dotenv()
+class Token(BaseModel):
+    """Authentication token model."""
     
-    # Cấu hình logging
-    configure_logging()
+    access_token: str
+    token_type: str
+    user: User
+
+
+# API Key Models
+class ApiKeyCreate(BaseModel):
+    """Model for API key creation."""
     
-    # Parse command line arguments
-    args = parse_arguments()
+    name: str
+    expires_at: Optional[datetime] = None
+
+
+class ApiKey(BaseModel):
+    """API key model."""
     
-    try:
-        # Cấu hình Gemini
-        configure_gemini(api_key=args.api_key)
-        
-        # Kiểm tra nếu đang chạy trong môi trường có thể tương tác
-        import sys
-        import os
-        
-        # Kiểm tra nếu stdin được kết nối với terminal (interactive)
-        is_interactive = os.isatty(sys.stdin.fileno()) if hasattr(sys.stdin, 'fileno') else False
-        
-        if is_interactive:
-            # Chỉ chạy shell nếu đang trong môi trường tương tác
-            run_interactive_shell(model_name=args.model)
-        else:
-            # Nếu không phải môi trường tương tác (ví dụ: Render), chạy FastAPI app
-            logger = get_logger("Main")
-            logger.info("Khởi động trong môi trường không tương tác. Bắt đầu FastAPI app...")
-            
-            # Lấy port từ biến môi trường hoặc sử dụng port mặc định
-            port = int(os.environ.get("PORT", 10000))
-            
-            # Log thông tin về port
-            logger.info(f"Khởi động FastAPI app trên port {port}")
-            print(f"Ứng dụng khởi động trên port {port}...")
-            
-            # Chạy FastAPI app với Uvicorn
-            uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
-        
-    except Exception as e:
-        logging.error(f"Lỗi khi khởi động ứng dụng: {e}")
-        print(f"Lỗi: {e}")
-        sys.exit(1)
+    id: str
+    key: str
+    name: str
+    created_at: datetime
+    expires_at: Optional[datetime] = None
+    last_used_at: Optional[datetime] = None
+    is_active: bool
 
 
-if __name__ == "__main__":
-    main()
-
-# Định nghĩa các models cho API
-class UserMessage(BaseModel):
-    """Model cho user message trong API"""
-    message: Optional[str] = None  # Make it optional since we might get 'text' instead
-    text: Optional[str] = None  # Thêm field text để tương thích với frontend
-    sessionId: Optional[str] = None  # Thêm field sessionId
-    session_id: Optional[str] = None  # Thêm field session_id để tương thích với Node.js API
-    user_id: Optional[str] = None     # Thêm field user_id để tương thích với Node.js API
-    metadata: Optional[Dict[str, Any]] = None  # Thêm field metadata
-    stream: Optional[bool] = False    # Thêm field stream cho streaming API
-
-class AgentResponse(BaseModel):
-    """Model cho response từ agent trong API"""
-    response: str
-    text: Optional[str] = None  # Thêm field text để tương thích với frontend
-    success: bool = True
-    agent_type: str = "root"  # Thêm field agent_type để tương thích với Node.js API
-
-class ChatSession(BaseModel):
-    """Model cho chat session"""
-    sessionId: str
-    session_id: Optional[str] = None  # Thêm field session_id để tương thích với Node.js API
-
-# --- API Routes ---
-# Endpoint /chat cho Node.js API Gateway
-@app.post("/chat")
-async def chat_endpoint(user_message: UserMessage):
-    """
-    Endpoint chính cho Node.js API Gateway
-    """
-    try:
-        # Log the request
-        logger = get_logger("API")
-        logger.info(f"Nhận API request từ Node.js: {user_message.message or user_message.text}")
-        
-        # Gọi root agent để xử lý tin nhắn
-        message_text = user_message.message or user_message.text or ""
-        response = root_agent.invoke(message_text)
-        
-        # Trả về response theo format mà Node.js API Gateway mong đợi
-        return {
-            "response": response,
-            "success": True,
-            "agent_type": "root"
-        }
-    except Exception as e:
-        logger.error(f"Lỗi xử lý API request: {e}")
-        raise HTTPException(status_code=500, detail=f"Lỗi xử lý request: {str(e)}")
-
-# Endpoint /chat/stream cho Node.js API Gateway
-@app.post("/chat/stream")
-async def chat_stream_endpoint(user_message: UserMessage):
-    """
-    Endpoint stream cho Node.js API Gateway
-    """
-    from fastapi.responses import StreamingResponse
-    import json
-    import asyncio
+# Payment Models
+class PlanType(str, Enum):
+    """Subscription plan types."""
     
-    try:
-        # Log the request
-        logger = get_logger("API")
-        logger.info(f"Nhận stream request từ Node.js: {user_message.message or user_message.text}")
-        
-        # Gọi root agent để xử lý tin nhắn
-        message_text = user_message.message or user_message.text or ""
-        response = root_agent.invoke(message_text)
-        
-        # Giả lập streaming bằng cách chia nhỏ phản hồi
-        async def fake_stream():
-            # Chia phản hồi thành các chunk nhỏ
-            chunk_size = 10  # Số ký tự mỗi chunk
-            for i in range(0, len(response), chunk_size):
-                chunk = response[i:i+chunk_size]
-                # Format theo định dạng SSE mà Node.js đang mong đợi
-                yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
-                await asyncio.sleep(0.05)  # Tạm dừng để giả lập stream
-            
-            # Gửi sự kiện hoàn thành
-            yield f"data: {json.dumps({'type': 'complete'})}\n\n"
-        
-        # Trả về streaming response
-        return StreamingResponse(
-            fake_stream(),
-            media_type="text/event-stream"
-        )
-    except Exception as e:
-        logger.error(f"Lỗi xử lý stream request: {e}")
-        raise HTTPException(status_code=500, detail=f"Lỗi xử lý request: {str(e)}")
+    FREE = "free"
+    BASIC = "basic"
+    PREMIUM = "premium"
+    ENTERPRISE = "enterprise"
 
-# Thêm route /agent/chat để tương thích với frontend
-@app.post("/agent/chat", response_model=ChatSession)
-async def create_chat_session():
-    """
-    Tạo phiên chat mới
-    """
-    try:
-        # Generate a simple session ID
-        import uuid
-        session_id = str(uuid.uuid4())
-        
-        # Log the session creation
-        logger = get_logger("API")
-        logger.info(f"Tạo phiên chat mới: {session_id}")
-        
-        # Return the session ID
-        return ChatSession(sessionId=session_id, session_id=session_id)
-    except Exception as e:
-        logger.error(f"Lỗi tạo phiên chat: {e}")
-        # Return a JSON response rather than raising an HTTPException
-        return {"error": "Đã xảy ra lỗi khi xử lý tin nhắn", "detail": str(e)}
 
-# Thêm route /agent/stream để tương thích với frontend
-@app.post("/agent/stream")
-async def stream_chat(user_message: UserMessage):
-    """
-    Endpoint cho phép chat với agent và nhận response dạng stream
-    """
-    try:
-        # Log the request
-        logger = get_logger("API")
-        logger.info(f"Nhận stream request: {user_message.message or user_message.text}")
-        
-        # Kiểm tra session ID
-        if not user_message.sessionId and not user_message.session_id:
-            logger.error("Không có phiên chat trong request")
-            return {"error": "Không có phiên chat. Vui lòng tạo phiên mới."}
-        
-        # Extract message
-        message_text = user_message.message or user_message.text or ""
-        
-        # Gọi root agent để xử lý tin nhắn
-        try:
-            response = root_agent.invoke(message_text)
-            # Trả về response dạng JSON
-            return {"text": response, "done": True}
-        except Exception as agent_error:
-            logger.error(f"Lỗi khi gọi agent: {agent_error}")
-            return {"error": f"Lỗi khi gọi agent: {str(agent_error)}", "done": True}
-            
-    except Exception as e:
-        logger.error(f"Lỗi xử lý stream request: {e}")
-        # Return a JSON response rather than raising an HTTPException
-        return {"error": "Đã xảy ra lỗi khi xử lý tin nhắn", "detail": str(e)}
+class Plan(BaseModel):
+    """Subscription plan model."""
+    
+    id: str
+    name: str
+    type: PlanType
+    price: float
+    currency: str = "VND"
+    interval: str = "month"
+    description: str
+    features: List[str]
+    quota: int
+    created_at: datetime
+    updated_at: datetime
 
-# Thêm route /query để tương thích với frontend cũ
-@app.post("/query")
-async def legacy_query(user_message: UserMessage):
-    """
-    Endpoint cũ cho phép query agent
-    """
-    try:
-        # Extract message text from either message or text field
-        message_text = user_message.message or user_message.text or ""
-        response = root_agent.invoke(message_text)
-        return {"response": response}
-    except Exception as e:
-        logger.error(f"Lỗi xử lý query request: {e}")
-        raise HTTPException(status_code=500, detail=f"Đã xảy ra lỗi khi xử lý tin nhắn")
 
-# Thêm API version prefix
-@app.post("/api/v2/agent/chat", response_model=ChatSession)
-async def create_chat_session_v2():
-    """
-    Alias cho /agent/chat với prefix API v2
-    """
-    return await create_chat_session()
+class PaymentCreate(BaseModel):
+    """Model for creating a payment."""
+    
+    plan_id: str
+    payment_method: str
+    amount: float
+    currency: str = "VND"
 
-@app.post("/api/v2/agent/stream")
-async def stream_chat_v2(user_message: UserMessage):
-    """
-    Alias cho /agent/stream với prefix API v2
-    """
-    return await stream_chat(user_message)
 
-@app.get("/")
-async def root():
-    """
-    Root endpoint, trả về thông tin cơ bản về API
-    """
-    return {
-        "name": "Phong Thủy Số API",
-        "version": "0.1.0",
-        "description": "API cho ứng dụng phân tích phong thủy số học",
-        "endpoints": {
-            "/api/chat": "Gửi tin nhắn đến agent và nhận phản hồi",
-            "/agent/chat": "Tạo phiên chat mới",
-            "/agent/stream": "Gửi tin nhắn và nhận phản hồi dạng stream",
-            "/health": "Kiểm tra trạng thái hoạt động của API"
-        }
+class Payment(BaseModel):
+    """Payment model."""
+    
+    id: str
+    user_id: str
+    plan_id: str
+    payment_method: str
+    amount: float
+    currency: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    transaction_id: Optional[str] = None
+
+
+class Subscription(BaseModel):
+    """Subscription model."""
+    
+    id: str
+    user_id: str
+    plan_id: str
+    status: str
+    start_date: datetime
+    end_date: datetime
+    created_at: datetime
+    updated_at: datetime
+    is_active: bool
+    auto_renew: bool
+
+
+# Mock database for development
+mock_users = {}
+mock_api_keys = {}
+mock_payments = {}
+mock_subscriptions = {}
+mock_plans = {
+    "free": {
+        "id": "free",
+        "name": "Miễn phí",
+        "type": "free",
+        "price": 0,
+        "currency": "VND",
+        "interval": "month",
+        "description": "Gói dùng thử miễn phí",
+        "features": ["Phân tích cơ bản số điện thoại", "5 lần phân tích/ngày"],
+        "quota": 5,
+        "created_at": datetime.now(),
+        "updated_at": datetime.now()
+    },
+    "basic": {
+        "id": "basic",
+        "name": "Cơ bản",
+        "type": "basic",
+        "price": 99000,
+        "currency": "VND",
+        "interval": "month",
+        "description": "Gói cơ bản cho người dùng cá nhân",
+        "features": ["Phân tích đầy đủ số điện thoại", "Phân tích CCCD", "50 lần phân tích/tháng"],
+        "quota": 50,
+        "created_at": datetime.now(),
+        "updated_at": datetime.now()
+    },
+    "premium": {
+        "id": "premium",
+        "name": "Cao cấp",
+        "type": "premium",
+        "price": 199000,
+        "currency": "VND",
+        "interval": "month",
+        "description": "Gói cao cấp cho người dùng chuyên nghiệp",
+        "features": ["Tất cả tính năng của gói Cơ bản", "Phân tích STK ngân hàng", "Phân tích mật khẩu", "200 lần phân tích/tháng"],
+        "quota": 200,
+        "created_at": datetime.now(),
+        "updated_at": datetime.now()
     }
+}
+
+# Security utilities
+def get_password_hash(password: str) -> str:
+    """Generate password hash."""
+    # Trong thực tế nên sử dụng thư viện mã hóa như passlib
+    import hashlib
+    return hashlib.sha256(password.encode()).hexdigest()
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify password."""
+    return get_password_hash(plain_password) == hashed_password
+
+
+def create_access_token(data: Dict[str, Any], expires_delta: Optional[int] = None) -> str:
+    """Create JWT token."""
+    # Giả lập JWT trong phiên bản demo
+    import time
+    import base64
+    import json
+    
+    to_encode = data.copy()
+    if expires_delta:
+        to_encode.update({"exp": time.time() + expires_delta})
+    
+    encoded_jwt = base64.b64encode(json.dumps(to_encode).encode()).decode()
+    return encoded_jwt
+
+
+def decode_token(token: str) -> Optional[Dict[str, Any]]:
+    """Decode JWT token."""
+    try:
+        import base64
+        import json
+        
+        decoded = base64.b64decode(token).decode()
+        return json.loads(decoded)
+    except Exception:
+        return None
+
+
+async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
+    """Get current user from token."""
+    payload = decode_token(token)
+    if not payload or "sub" not in payload:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    username = payload.get("sub")
+    user = mock_users.get(username)
+    
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="User not found",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    return user
+
+
+async def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
+    """Check if user is active."""
+    if not current_user.get("is_active", False):
+        raise HTTPException(status_code=400, detail="Inactive user")
+    return current_user
+
+
+async def validate_api_key(api_key: str = Header(..., convert_underscores=False)) -> Dict[str, Any]:
+    """Validate API key."""
+    for key_id, key_data in mock_api_keys.items():
+        if key_data["key"] == api_key and key_data["is_active"]:
+            # Cập nhật last_used_at
+            key_data["last_used_at"] = datetime.now()
+            
+            # Kiểm tra xem key đã hết hạn chưa
+            if key_data.get("expires_at") and key_data["expires_at"] < datetime.now():
+                raise HTTPException(status_code=401, detail="API key expired")
+                
+            # Lấy thông tin user
+            user = mock_users.get(key_data["user_id"])
+            if not user or not user.get("is_active", False):
+                raise HTTPException(status_code=401, detail="User not active")
+                
+            return key_data
+            
+    raise HTTPException(status_code=401, detail="Invalid API key")
+
+
+# User endpoints
+@app.post("/api/user/register", response_model=User)
+async def register_user(user: UserCreate):
+    """Register a new user."""
+    if user.email in mock_users:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    user_id = str(uuid.uuid4())
+    hashed_password = get_password_hash(user.password)
+    
+    user_data = {
+        "id": user_id,
+        "email": user.email,
+        "fullname": user.fullname,
+        "hashed_password": hashed_password,
+        "created_at": datetime.now(),
+        "updated_at": datetime.now(),
+        "is_active": True,
+        "is_premium": False,
+        "quota_remaining": mock_plans["free"]["quota"] 
+    }
+    
+    mock_users[user.email] = user_data
+    
+    # Create subscription to free plan
+    subscription_id = str(uuid.uuid4())
+    subscription_data = {
+        "id": subscription_id,
+        "user_id": user_id,
+        "plan_id": "free",
+        "status": "active",
+        "start_date": datetime.now(),
+        "end_date": datetime.now().replace(month=datetime.now().month + 1),
+        "created_at": datetime.now(),
+        "updated_at": datetime.now(),
+        "is_active": True,
+        "auto_renew": False
+    }
+    mock_subscriptions[subscription_id] = subscription_data
+    
+    return {**user_data, "hashed_password": ""}
+
+
+@app.post("/api/user/token", response_model=Token)
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
+    """Login to get access token."""
+    user = mock_users.get(form_data.username)
+    if not user or not verify_password(form_data.password, user.get("hashed_password", "")):
+        raise HTTPException(
+            status_code=401,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    access_token = create_access_token(
+        data={"sub": user["email"]},
+        expires_delta=60 * 60 * 24 * 30  # 30 days
+    )
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {**user, "hashed_password": ""}
+    }
+
+
+@app.get("/api/user/me", response_model=User)
+async def read_users_me(current_user: User = Depends(get_current_active_user)):
+    """Get current user information."""
+    return {**current_user, "hashed_password": ""}
+
+
+@app.put("/api/user/me", response_model=User)
+async def update_user(
+    user_update: UserUpdate,
+    current_user: User = Depends(get_current_active_user)
+):
+    """Update user information."""
+    user_data = mock_users[current_user["email"]]
+    
+    if user_update.fullname:
+        user_data["fullname"] = user_update.fullname
+    
+    if user_update.email and user_update.email != current_user["email"]:
+        if user_update.email in mock_users:
+            raise HTTPException(status_code=400, detail="Email already registered")
+        
+        # Create new entry with updated email
+        mock_users[user_update.email] = user_data
+        # Delete old entry
+        del mock_users[current_user["email"]]
+        user_data["email"] = user_update.email
+    
+    if user_update.password:
+        user_data["hashed_password"] = get_password_hash(user_update.password)
+    
+    user_data["updated_at"] = datetime.now()
+    
+    return {**user_data, "hashed_password": ""}
+
+
+# API Keys endpoints
+@app.post("/api/apikeys", response_model=ApiKey)
+async def create_api_key(
+    api_key_create: ApiKeyCreate,
+    current_user: User = Depends(get_current_active_user)
+):
+    """Create a new API key."""
+    api_key_id = str(uuid.uuid4())
+    api_key = f"pts_{uuid.uuid4().hex}"
+    
+    api_key_data = {
+        "id": api_key_id,
+        "key": api_key,
+        "name": api_key_create.name,
+        "user_id": current_user["id"],
+        "created_at": datetime.now(),
+        "expires_at": api_key_create.expires_at,
+        "last_used_at": None,
+        "is_active": True
+    }
+    
+    mock_api_keys[api_key_id] = api_key_data
+    
+    return api_key_data
+
+
+@app.get("/api/apikeys", response_model=List[ApiKey])
+async def list_api_keys(current_user: User = Depends(get_current_active_user)):
+    """List all API keys for the current user."""
+    user_api_keys = [
+        key for key in mock_api_keys.values() 
+        if key["user_id"] == current_user["id"]
+    ]
+    
+    return user_api_keys
+
+
+@app.delete("/api/apikeys/{api_key_id}", response_model=Dict[str, str])
+async def delete_api_key(
+    api_key_id: str,
+    current_user: User = Depends(get_current_active_user)
+):
+    """Delete an API key."""
+    if api_key_id not in mock_api_keys:
+        raise HTTPException(status_code=404, detail="API key not found")
+    
+    if mock_api_keys[api_key_id]["user_id"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this API key")
+    
+    del mock_api_keys[api_key_id]
+    
+    return {"message": "API key deleted successfully"}
+
+
+# Routes
+@app.get("/", include_in_schema=False)
+async def read_root(request: Request):
+    """Root endpoint that renders the home page."""
+    if templates:
+        return templates.TemplateResponse(
+            "index.html", {"request": request, "version": app.version}
+        )
+    else:
+        return {"message": "Welcome to Phong Thuy API", "version": app.version}
+
 
 @app.get("/health")
 async def health_check():
-    """
-    Endpoint kiểm tra trạng thái hoạt động của ứng dụng.
-    Sử dụng bởi Docker healthcheck.
-    """
-    return {"status": "healthy", "version": "0.1.0"}
+    """Health check endpoint."""
+    return {"status": "healthy", "version": app.version}
 
-# Giữ lại /api/chat endpoint cho direct access
-@app.post("/api/chat", response_model=AgentResponse)
-async def chat_with_agent(user_message: UserMessage):
-    """
-    Endpoint cho phép chat với agent thông qua API request trực tiếp
-    """
+
+@app.get("/agents")
+async def get_agents():
+    """Get the list of available agents."""
+    return {
+        "agents": [
+            {
+                "name": "Root Agent",
+                "type": "root",
+            }
+        ]
+    }
+
+
+@app.get("/analyze_number")
+async def analyze_number(
+    number: str = Query(..., description="The phone number to analyze"),
+    user_data: Optional[str] = Query(None, description="Additional user data in JSON format"),
+    current_user: Optional[User] = Depends(get_current_user),
+    api_key: Optional[str] = Header(None, convert_underscores=False)
+):
+    """Analyze a phone number."""
+    # Authenticate with either user session or API key
+    user = None
+    if current_user:
+        user = current_user
+    elif api_key:
+        key_data = None
+        try:
+            key_data = await validate_api_key(api_key)
+            user = mock_users.get(key_data["user_id"])
+        except HTTPException:
+            pass
+    
+    # Check if user exists and has quota
+    if user:
+        # Check quota
+        if user["quota_remaining"] <= 0:
+            raise HTTPException(
+                status_code=402,
+                detail="Quota exceeded. Please upgrade your subscription."
+            )
+        
+        # Reduce quota
+        user["quota_remaining"] -= 1
+    
+    # Original analyze logic
     try:
-        # Log the request
-        logger = get_logger("API")
-        logger.info(f"Nhận API request trực tiếp: {user_message.message or user_message.text}")
+        user_data_dict = {}
+        if user_data:
+            try:
+                user_data_dict = json.loads(user_data)
+            except json.JSONDecodeError:
+                return JSONResponse(
+                    status_code=400, 
+                    content={
+                        "status": "error", 
+                        "detail": "Invalid JSON format for user_data"
+                    }
+                )
+
+        # Xử lý phân tích số điện thoại đơn giản
+        digits = [int(digit) for digit in number if digit.isdigit()]
         
-        # Gọi root agent để xử lý tin nhắn
-        message_text = user_message.message or user_message.text or ""
-        response = root_agent.invoke(message_text)
+        # Tính tổng các chữ số
+        digit_sum = sum(digits)
         
-        # Trả về response
-        return AgentResponse(response=response, text=response)
+        # Tính số chủ đạo (chữ số cuối cùng của tổng)
+        master_number = digit_sum % 9 or 9
+        
+        # Tạo phản hồi
+        return {
+            "agent": "Simple Agent",
+            "status": "success",
+            "content": f"Phân tích số điện thoại {number}: Số chủ đạo của bạn là {master_number}",
+            "metadata": {
+                "digits": digits,
+                "digit_sum": digit_sum,
+                "master_number": master_number,
+                "user_info": {"email": user["email"], "quota_remaining": user["quota_remaining"]} if user else None
+            }
+        }
+        
     except Exception as e:
-        logger.error(f"Lỗi xử lý API request: {e}")
-        raise HTTPException(status_code=500, detail=f"Lỗi xử lý request: {str(e)}") 
+        logger.exception(f"Error analyzing number: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error", 
+                "detail": str(e)
+            }
+        )
+
+
+@app.post("/api/chat")
+async def post_chat(
+    request: ChatRequest,
+    current_user: Optional[User] = Depends(get_current_user),
+    api_key: Optional[str] = Header(None, convert_underscores=False)
+):
+    """Send a message to the agent system."""
+    # Authenticate with either user session or API key
+    user = None
+    if current_user:
+        user = current_user
+    elif api_key:
+        key_data = None
+        try:
+            key_data = await validate_api_key(api_key)
+            user = mock_users.get(key_data["user_id"])
+        except HTTPException:
+            pass
+    
+    # Check if user exists and has quota
+    if user:
+        # Check quota
+        if user["quota_remaining"] <= 0:
+            raise HTTPException(
+                status_code=402,
+                detail="Quota exceeded. Please upgrade your subscription."
+            )
+        
+        # Reduce quota
+        user["quota_remaining"] -= 1
+    
+    # Original chat logic
+    try:
+        # Mô phỏng xử lý tin nhắn đơn giản
+        message = request.message
+        context = request.context or {}
+        
+        # Phân tích tin nhắn đơn giản (đây chỉ là mô phỏng)
+        response_content = f"Đã nhận tin nhắn: {message}"
+        
+        # Kiểm tra nếu tin nhắn chứa từ khóa "số điện thoại"
+        if "số điện thoại" in message.lower():
+            # Tìm số điện thoại trong tin nhắn (đơn giản hóa)
+            import re
+            phone_numbers = re.findall(r'\d{10,11}', message)
+            
+            if phone_numbers:
+                number = phone_numbers[0]
+                digits = [int(digit) for digit in number if digit.isdigit()]
+                digit_sum = sum(digits)
+                master_number = digit_sum % 9 or 9
+                
+                response_content = f"Số điện thoại {number} có số chủ đạo là {master_number}. Đây là số may mắn trong phong thủy."
+        
+        return {
+            "agent": "Phong Thuy Agent",
+            "status": "success",
+            "content": response_content,
+            "metadata": {
+                "confidence": 0.95,
+                "analysis_type": "text",
+                "user_id": context.get("user_id", "unknown"),
+                "session_id": context.get("session_id", "unknown"),
+                "user_info": {"email": user["email"], "quota_remaining": user["quota_remaining"]} if user else None
+            }
+        }
+        
+    except Exception as e:
+        logger.exception(f"Error processing chat: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error", 
+                "detail": str(e)
+            }
+        )
+
+
+async def stream_response(session_id: str):
+    """Generate streaming responses."""
+    try:
+        # Mô phỏng streaming response
+        responses = [
+            {
+                "agent": "Phong Thuy Agent",
+                "status": "streaming",
+                "content": "Đang phân tích...",
+                "is_final": False
+            },
+            {
+                "agent": "Phong Thuy Agent",
+                "status": "streaming",
+                "content": "Số điện thoại của bạn có các thành phần âm dương hài hòa.",
+                "is_final": False
+            },
+            {
+                "agent": "Phong Thuy Agent",
+                "status": "success",
+                "content": "Kết luận: Số điện thoại của bạn là một số may mắn theo phong thủy.",
+                "is_final": True
+            }
+        ]
+        
+        for response in responses:
+            # Định dạng event stream
+            yield f"data: {json.dumps(response)}\n\n"
+            # Chờ một chút để mô phỏng xử lý
+            import asyncio
+            await asyncio.sleep(1)
+            
+    except Exception as e:
+        logger.exception(f"Error in streaming: {e}")
+        error_response = {
+            "agent": "System",
+            "status": "error",
+            "content": str(e),
+            "is_final": True
+        }
+        yield f"data: {json.dumps(error_response)}\n\n"
+
+
+@app.get("/api/chat")
+async def get_chat(
+    background_tasks: BackgroundTasks,
+    session_id: str = Query(..., description="Session ID for the chat"),
+):
+    """Get streaming responses from the agent system."""
+    return StreamingResponse(
+        stream_response(session_id),
+        media_type="text/event-stream"
+    )
+
+
+@app.post("/api/upload")
+async def upload_file(
+    file: UploadFile = File(...),
+    type: Optional[str] = Form(None),
+    metadata: Optional[str] = Form(None),
+):
+    """Upload a file (image, PDF, audio)."""
+    try:
+        # Validate file type if provided
+        if type:
+            valid_types = ["image", "pdf", "audio", "text"]
+            if type not in valid_types:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "detail": f"Invalid file type. Must be one of: {', '.join(valid_types)}"
+                    }
+                )
+        
+        # Parse metadata if provided
+        metadata_dict = {}
+        if metadata:
+            try:
+                metadata_dict = json.loads(metadata)
+            except json.JSONDecodeError:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "status": "error",
+                        "detail": "Invalid JSON format for metadata"
+                    }
+                )
+        
+        # Generate a unique file ID
+        file_id = f"f{uuid.uuid4().hex[:6]}"
+        
+        # Get the file extension
+        _, extension = os.path.splitext(file.filename)
+        if not extension:
+            extension = ".bin"  # Default extension if none provided
+        
+        # Create the new filename
+        new_filename = f"{file_id}{extension}"
+        file_path = os.path.join(uploads_path, new_filename)
+        
+        # Save the file
+        with open(file_path, "wb") as f:
+            contents = await file.read()
+            f.write(contents)
+        
+        # Generate file URL
+        file_url = f"/static/uploads/{new_filename}"
+        
+        # Create response with file metadata
+        return {
+            "status": "success",
+            "file_id": file_id,
+            "file_url": file_url,
+            "metadata": {
+                "file_type": type or "unknown",
+                "file_size": os.path.getsize(file_path),
+                "upload_date": datetime.now().isoformat(),
+                "original_filename": file.filename,
+                **metadata_dict
+            }
+        }
+        
+    except Exception as e:
+        logger.exception(f"Error uploading file: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "detail": str(e)
+            }
+        )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """Handle general exceptions."""
+    logger.exception(f"Unhandled exception: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={"status": "error", "detail": str(exc)},
+    )
+
+
+# Startup and shutdown events
+@app.on_event("startup")
+async def startup_event():
+    """Startup event handler."""
+    logger.info("Starting up Phong Thuy API")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Shutdown event handler."""
+    logger.info("Shutting down Phong Thuy API")
+
+
+# For local development
+if __name__ == "__main__":
+    import uvicorn
+
+    logger.info(f"Starting Phong Thuy API server in {env_mode} mode on port {port}")
+    uvicorn.run(app, host="0.0.0.0", port=port, reload=True)
+
+# Payment endpoints
+@app.get("/api/payment/plans", response_model=List[Plan])
+async def list_plans():
+    """List all available subscription plans."""
+    return list(mock_plans.values())
+
+
+@app.get("/api/payment/plans/{plan_id}", response_model=Plan)
+async def get_plan(plan_id: str):
+    """Get details of a specific plan."""
+    if plan_id not in mock_plans:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    
+    return mock_plans[plan_id]
+
+
+@app.post("/api/payment", response_model=Payment)
+async def create_payment(
+    payment_create: PaymentCreate,
+    current_user: User = Depends(get_current_active_user)
+):
+    """Create a new payment."""
+    if payment_create.plan_id not in mock_plans:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    
+    plan = mock_plans[payment_create.plan_id]
+    
+    if payment_create.amount != plan["price"]:
+        raise HTTPException(status_code=400, detail="Invalid payment amount")
+    
+    payment_id = str(uuid.uuid4())
+    payment_data = {
+        "id": payment_id,
+        "user_id": current_user["id"],
+        "plan_id": payment_create.plan_id,
+        "payment_method": payment_create.payment_method,
+        "amount": payment_create.amount,
+        "currency": payment_create.currency,
+        "status": "pending",
+        "created_at": datetime.now(),
+        "updated_at": datetime.now(),
+        "transaction_id": None
+    }
+    
+    mock_payments[payment_id] = payment_data
+    
+    # In a real implementation, this would trigger payment processing
+    # For the demo, we'll just complete the payment immediately
+    payment_data["status"] = "completed"
+    payment_data["transaction_id"] = f"txn_{uuid.uuid4().hex}"
+    payment_data["updated_at"] = datetime.now()
+    
+    # Create or update subscription
+    existing_subscription = None
+    for sub in mock_subscriptions.values():
+        if sub["user_id"] == current_user["id"] and sub["is_active"]:
+            existing_subscription = sub
+            break
+    
+    if existing_subscription:
+        # Update existing subscription
+        existing_subscription["plan_id"] = plan["id"]
+        existing_subscription["status"] = "active"
+        existing_subscription["updated_at"] = datetime.now()
+        
+        # Extend end date
+        if plan["interval"] == "month":
+            existing_subscription["end_date"] = existing_subscription["end_date"].replace(
+                month=existing_subscription["end_date"].month + 1
+            )
+        elif plan["interval"] == "year":
+            existing_subscription["end_date"] = existing_subscription["end_date"].replace(
+                year=existing_subscription["end_date"].year + 1
+            )
+    else:
+        # Create new subscription
+        subscription_id = str(uuid.uuid4())
+        end_date = datetime.now()
+        
+        if plan["interval"] == "month":
+            end_date = end_date.replace(month=end_date.month + 1)
+        elif plan["interval"] == "year":
+            end_date = end_date.replace(year=end_date.year + 1)
+            
+        subscription_data = {
+            "id": subscription_id,
+            "user_id": current_user["id"],
+            "plan_id": plan["id"],
+            "status": "active",
+            "start_date": datetime.now(),
+            "end_date": end_date,
+            "created_at": datetime.now(),
+            "updated_at": datetime.now(),
+            "is_active": True,
+            "auto_renew": True
+        }
+        mock_subscriptions[subscription_id] = subscription_data
+    
+    # Update user status and quota
+    user_data = mock_users[current_user["email"]]
+    user_data["is_premium"] = plan["type"] != "free"
+    user_data["quota_remaining"] = plan["quota"]
+    user_data["updated_at"] = datetime.now()
+    
+    return payment_data
+
+
+@app.get("/api/payment/history", response_model=List[Payment])
+async def get_payment_history(current_user: User = Depends(get_current_active_user)):
+    """Get payment history for the current user."""
+    user_payments = [
+        payment for payment in mock_payments.values()
+        if payment["user_id"] == current_user["id"]
+    ]
+    
+    return user_payments
+
+
+@app.get("/api/payment/subscription", response_model=Optional[Subscription])
+async def get_active_subscription(current_user: User = Depends(get_current_active_user)):
+    """Get the active subscription for the current user."""
+    for subscription in mock_subscriptions.values():
+        if (subscription["user_id"] == current_user["id"] and 
+            subscription["is_active"] and 
+            subscription["status"] == "active"):
+            return subscription
+    
+    return None 

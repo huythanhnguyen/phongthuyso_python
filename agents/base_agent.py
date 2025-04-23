@@ -1,87 +1,98 @@
 """
-Base Agent Module.
+Base Agent Module
 
-This module defines the BaseAgent class that all other agents inherit from.
+Module cung cấp lớp cơ sở cho tất cả các agent trong hệ thống.
 """
 
 import abc
-import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel
-
-from .agent_types import AgentType
+from phongthuyso_python.agents.agent_types import AgentType
 
 
-class AgentResponse(BaseModel):
-    """Model for agent responses."""
-    content: str
-    metadata: Optional[Dict[str, Any]] = None
+class BaseAgent:
+    """
+    Lớp cơ sở cho tất cả các agent chuyên biệt trong hệ thống Phong Thủy Số.
+    """
 
-
-class BaseAgent(abc.ABC):
-    """Base class for all agents in the system."""
-
-    def __init__(self, name: str, agent_type: AgentType):
-        """Initialize the base agent.
-
+    def __init__(
+        self,
+        name: str,
+        agent_type: AgentType,
+    ):
+        """
+        Khởi tạo BaseAgent
+        
         Args:
-            name: The name of the agent.
-            agent_type: The type of the agent.
+            name (str): Tên của agent
+            agent_type (AgentType): Loại agent
         """
         self.name = name
         self.agent_type = agent_type
-        self.logger = logging.getLogger(f"agent.{name}")
-
-    @abc.abstractmethod
-    async def process(self, message: str, context: Optional[Dict[str, Any]] = None) -> AgentResponse:
-        """Process a message and return a response.
-
-        Args:
-            message: The message to process.
-            context: Optional context information.
-
-        Returns:
-            An AgentResponse containing the processed result.
-        """
-        pass
-
+        
+        # Các thuộc tính mở rộng 
+        self.current_context: Dict[str, Any] = {}
+        self.conversation_history: List[Dict[str, Any]] = []
+    
     async def handle_request(self, request: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle an incoming request.
-
+        """
+        Xử lý yêu cầu từ người dùng
+        
         Args:
-            request: The request data.
-
+            request (Dict[str, Any]): Yêu cầu từ người dùng
+        
         Returns:
-            The response data.
+            Dict[str, Any]: Kết quả xử lý
         """
         message = request.get("message", "")
         context = request.get("context", {})
         
-        try:
-            self.logger.info(f"Processing message: {message[:50]}...")
-            response = await self.process(message, context)
-            
-            return {
-                "status": "success",
-                "agent": self.name,
-                "content": response.content,
-                "metadata": response.metadata or {}
-            }
-        except Exception as e:
-            self.logger.exception(f"Error processing message: {e}")
-            
-            return {
-                "status": "error",
-                "agent": self.name,
-                "error": str(e),
-                "content": "Sorry, I encountered an error while processing your request."
-            }
-
-    def __str__(self) -> str:
-        """Return a string representation of the agent.
-
-        Returns:
-            A string representation.
+        # Xử lý yêu cầu
+        response = self.process_message(message, context)
+        
+        return {
+            "agent": self.name,
+            "status": "success",
+            "content": response,
+            "metadata": {}
+        }
+    
+    def process_message(self, message: str, context: Dict[str, Any]) -> str:
         """
-        return f"{self.name} ({self.agent_type.name})" 
+        Xử lý tin nhắn từ người dùng
+        
+        Args:
+            message (str): Tin nhắn của người dùng
+            context (Dict[str, Any]): Ngữ cảnh của tin nhắn
+            
+        Returns:
+            str: Phản hồi của agent
+        """
+        # Đây là phương thức cơ bản, cần được ghi đè ở các lớp con
+        return f"Agent {self.name} đã nhận tin nhắn: {message}"
+    
+    def update_context(self, key: str, value: Any) -> None:
+        """
+        Cập nhật context của agent
+        
+        Args:
+            key (str): Khóa của context
+            value (Any): Giá trị cần lưu
+        """
+        self.current_context[key] = value
+    
+    def get_context(self, key: str, default: Any = None) -> Any:
+        """
+        Lấy giá trị từ context
+        
+        Args:
+            key (str): Khóa cần lấy
+            default (Any, optional): Giá trị mặc định nếu không tìm thấy
+            
+        Returns:
+            Any: Giá trị tương ứng với khóa hoặc giá trị mặc định
+        """
+        return self.current_context.get(key, default)
+    
+    def __str__(self) -> str:
+        return f"{self.__class__.__name__}" 
