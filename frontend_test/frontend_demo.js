@@ -1,5 +1,5 @@
 // Cấu hình API 
-const API_URL = 'http://localhost:8000';
+let API_URL = localStorage.getItem('apiBaseUrl') || 'http://localhost:8000';
 let accessToken = localStorage.getItem('accessToken') || '';
 
 // Helper functions
@@ -20,6 +20,42 @@ function displayResponse(elementId, data, isError = false) {
     } catch (error) {
         element.textContent = typeof data === 'string' ? data : 'Lỗi hiển thị dữ liệu';
     }
+}
+
+// Khi trang web được tải, đặt giá trị API URL vào input
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('apiBaseUrl').value = API_URL;
+    displayResponse('configResponse', { 
+        current_api_url: API_URL,
+        access_token_status: accessToken ? 'Đã có' : 'Chưa đăng nhập'
+    });
+});
+
+// Hàm cập nhật API URL
+function updateApiUrl() {
+    const newApiUrl = document.getElementById('apiBaseUrl').value.trim();
+    
+    if (!newApiUrl) {
+        displayResponse('configResponse', { error: 'Vui lòng nhập API URL' }, true);
+        return;
+    }
+    
+    // Kiểm tra URL có hợp lệ không
+    try {
+        new URL(newApiUrl);
+    } catch (e) {
+        displayResponse('configResponse', { error: 'URL không hợp lệ' }, true);
+        return;
+    }
+    
+    // Lưu URL mới
+    API_URL = newApiUrl;
+    localStorage.setItem('apiBaseUrl', API_URL);
+    
+    displayResponse('configResponse', { 
+        message: 'API URL đã được cập nhật',
+        current_api_url: API_URL
+    });
 }
 
 async function fetchAPI(endpoint, options = {}) {

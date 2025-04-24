@@ -32,6 +32,14 @@
         pre {
             white-space: pre-wrap;
         }
+        .endpoint-info {
+            background-color: #e9ecef;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            font-family: monospace;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -40,7 +48,10 @@
         
         <ul class="nav nav-tabs" id="apiTabs" role="tablist">
             <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="home-tab" data-bs-toggle="tab" data-bs-target="#home" type="button" role="tab">Trang chủ</button>
+                <button class="nav-link active" id="config-tab" data-bs-toggle="tab" data-bs-target="#config" type="button" role="tab">Cấu hình</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="home-tab" data-bs-toggle="tab" data-bs-target="#home" type="button" role="tab">Trang chủ</button>
             </li>
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="analyze-tab" data-bs-toggle="tab" data-bs-target="#analyze" type="button" role="tab">Phân tích số</button>
@@ -66,8 +77,36 @@
         </ul>
         
         <div class="tab-content" id="apiTabsContent">
+            <!-- Cấu hình -->
+            <div class="tab-pane fade show active" id="config" role="tabpanel">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Cấu hình API URL</div>
+                            <div class="card-body">
+                                <div class="form-group">
+                                    <label for="apiBaseUrl">API Base URL</label>
+                                    <input type="text" class="form-control" id="apiBaseUrl" placeholder="http://localhost:8000">
+                                </div>
+                                <button class="btn btn-primary" onclick="updateApiUrl()">Cập nhật</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Thông tin hiện tại</div>
+                            <div class="card-body">
+                                <div class="response-container" id="configResponse"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
             <!-- Trang chủ -->
-            <div class="tab-pane fade show active" id="home" role="tabpanel">
+            <div class="tab-pane fade" id="home" role="tabpanel">
+                <div class="endpoint-info">Endpoints: /health, /agents</div>
                 <div class="row">
                     <div class="col-md-6">
                         <div class="card mb-3">
@@ -98,6 +137,7 @@
             
             <!-- Phân tích số -->
             <div class="tab-pane fade" id="analyze" role="tabpanel">
+                <div class="endpoint-info">Endpoint: /analyze_number</div>
                 <div class="row">
                     <div class="col-md-6">
                         <div class="card">
@@ -129,6 +169,7 @@
             
             <!-- Chat -->
             <div class="tab-pane fade" id="chat" role="tabpanel">
+                <div class="endpoint-info">Endpoints: /api/chat</div>
                 <div class="row">
                     <div class="col-md-6">
                         <div class="card">
@@ -171,6 +212,7 @@
             
             <!-- Đăng nhập/Đăng ký -->
             <div class="tab-pane fade" id="auth" role="tabpanel">
+                <div class="endpoint-info">Endpoints: /api/user/register, /api/user/token</div>
                 <div class="row">
                     <div class="col-md-6">
                         <div class="card mb-3">
@@ -221,6 +263,7 @@
             
             <!-- Người dùng -->
             <div class="tab-pane fade" id="user" role="tabpanel">
+                <div class="endpoint-info">Endpoints: /api/user/me</div>
                 <div class="row">
                     <div class="col-md-6">
                         <div class="card mb-3">
@@ -263,6 +306,7 @@
             
             <!-- API Key -->
             <div class="tab-pane fade" id="apikey" role="tabpanel">
+                <div class="endpoint-info">Endpoints: /api/apikeys</div>
                 <div class="row">
                     <div class="col-md-6">
                         <div class="card mb-3">
@@ -308,6 +352,7 @@
             
             <!-- Thanh toán -->
             <div class="tab-pane fade" id="payment" role="tabpanel">
+                <div class="endpoint-info">Endpoints: /api/payment/plans, /api/payment, /api/payment/history, /api/payment/subscription</div>
                 <div class="row">
                     <div class="col-md-6">
                         <div class="card mb-3">
@@ -375,6 +420,7 @@
             
             <!-- Upload -->
             <div class="tab-pane fade" id="upload" role="tabpanel">
+                <div class="endpoint-info">Endpoints: /api/upload</div>
                 <div class="row">
                     <div class="col-md-6">
                         <div class="card">
