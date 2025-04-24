@@ -10,7 +10,7 @@ import os
 from fastapi.testclient import TestClient
 from unittest.mock import patch
 
-from phongthuyso_python.main import app
+from main import app
 
 class TestPhongThuyAPI(unittest.TestCase):
     """Test cases cho các endpoint của API Phong Thuy So."""

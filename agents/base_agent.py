@@ -7,7 +7,7 @@ Module cung cấp lớp cơ sở cho tất cả các agent trong hệ thống.
 import abc
 from typing import Any, Dict, List, Optional
 
-from phongthuyso_python.agents.agent_types import AgentType
+from .agent_types import AgentType
 
 
 class BaseAgent:

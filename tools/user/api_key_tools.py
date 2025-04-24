@@ -9,8 +9,8 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
-from phongthuyso_python.agents.user_agent.models import ApiKeyCreate
-from phongthuyso_python.agents.user_agent.tools.user_tools import mock_api_keys
+from agents.user_agent.models import ApiKeyCreate
+from .user_tools import mock_api_keys
 
 
 def create_api_key(user_id: str, api_key_create: ApiKeyCreate) -> Dict[str, Any]:

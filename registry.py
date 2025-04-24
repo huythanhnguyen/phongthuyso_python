@@ -6,8 +6,8 @@ Module quản lý việc đăng ký và khởi tạo các agent trong hệ thố
 
 from typing import Dict, List, Optional
 
-from phongthuyso_python.agents.agent_types import AgentType
-from phongthuyso_python.agents.base_agent import BaseAgent
+from agents.agent_types import AgentType
+from agents.base_agent import BaseAgent
 
 
 class AgentRegistry:

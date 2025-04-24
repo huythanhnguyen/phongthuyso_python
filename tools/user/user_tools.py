@@ -9,8 +9,8 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
-from phongthuyso_python.agents.user_agent.models import User, UserCreate, UserUpdate
-from phongthuyso_python.agents.user_agent.tools.auth_tools import get_password_hash
+from agents.user_agent.models import User, UserCreate, UserUpdate
+from .auth_tools import get_password_hash
 
 # Mock database
 mock_users = {}

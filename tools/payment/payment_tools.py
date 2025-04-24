@@ -9,8 +9,8 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
-from phongthuyso_python.agents.payment_agent.models import Payment, PaymentCreate
-from phongthuyso_python.agents.payment_agent.tools.plan_tools import get_plan_by_id
+from agents.payment_agent.models import Payment, PaymentCreate
+from .plan_tools import get_plan_by_id
 
 # Mock payments data
 mock_payments = {}

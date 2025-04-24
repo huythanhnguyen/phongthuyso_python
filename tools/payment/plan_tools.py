@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
-from phongthuyso_python.agents.payment_agent.models import Plan, PlanType
+from agents.payment_agent.models import Plan, PlanType
 
 # Mock plans data
 mock_plans = {
