@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import Header, HTTPException # For dependency injection if needed directly
 
 # Corrected imports
-from shared_libraries.models import ApiKeyCreate
+from agents.user_agent.models import ApiKeyCreate
 from shared_libraries.logger import get_logger
 # Update tool import paths
 from tools.user.api_key_tools import (
