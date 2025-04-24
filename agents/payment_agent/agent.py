@@ -9,7 +9,6 @@ from typing import Any, Dict
 # Corrected imports
 from agents.base_agent import BaseAgent
 from agents.agent_types import AgentType
-from prompt import get_agent_prompt # Assuming prompt.py is at the root
 from shared_libraries.logger import get_logger
 
 # Import the sub-agent (relative path is fine here)
@@ -20,6 +19,13 @@ from shared_libraries.models import (
     PaymentRequest, # e.g., process_payment, create_checkout_session
     SubscriptionRequest # e.g., get_status, update_plan
 )
+
+# Import payment tools from the correct location
+from tools.payment.payment_tools import process_payment # Example tool
+from tools.payment.subscription_tools import get_subscription_status, update_subscription # Example tools
+
+# Import the prompt string
+from .prompts.system_prompt import SYSTEM_PROMPT
 
 # Tạo một agent kế thừa từ BaseAgent
 class PaymentAgent(BaseAgent):
@@ -32,7 +38,7 @@ class PaymentAgent(BaseAgent):
         Khởi tạo Payment Agent và SubscriptionAgent sub-agent.
         """
         self.logger = get_logger(name)
-        instruction = get_agent_prompt(AgentType.PAYMENT)
+        instruction = SYSTEM_PROMPT
         
         # Instantiate Sub-Agent
         self.subscription_agent = SubscriptionAgent()
@@ -56,8 +62,9 @@ class PaymentAgent(BaseAgent):
         (Placeholder Implementation)
         """
         self.logger.info(f"Processing payment request: {request}")
-        # TODO: Implement logic using payment tools (e.g., call Stripe API)
-        return {"status": "payment_processed", "transaction_id": "dummy_txn_123"}
+        # TODO: Implement logic using payment tools (e.g., call Stripe API via process_payment)
+        # result = process_payment(request.amount, request.currency, request.source)
+        return {"status": "payment_processed", "transaction_id": "dummy_txn_123"} # Placeholder
         
     def process_subscription_request(self, request: SubscriptionRequest) -> Dict[str, Any]:
         """
@@ -66,9 +73,11 @@ class PaymentAgent(BaseAgent):
         self.logger.info(f"Routing subscription request to SubscriptionAgent: {request}")
         # Example routing based on request type or attributes
         if hasattr(request, 'user_id') and hasattr(request, 'new_plan_id'):
-            return self.subscription_agent.update_subscription(request.user_id, request.new_plan_id)
+            # return self.subscription_agent.update_subscription(request.user_id, request.new_plan_id)
+            return update_subscription(request.user_id, request.new_plan_id) # Call tool directly
         elif hasattr(request, 'user_id'):
-            return self.subscription_agent.get_subscription_status(request.user_id)
+            # return self.subscription_agent.get_subscription_status(request.user_id)
+            return get_subscription_status(request.user_id) # Call tool directly
         else:
             self.logger.error(f"Unknown subscription request type: {request}")
             return {"error": "Unknown subscription request type"}

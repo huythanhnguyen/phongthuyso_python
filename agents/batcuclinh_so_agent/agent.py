@@ -26,8 +26,10 @@ from .sub_agents.cccd_agent import CCCDAgent
 from .sub_agents.bank_account_agent import BankAccountAgent
 from .sub_agents.password_agent import PasswordAgent
 
-# Import AgentType for prompt
+# Import AgentType for prompt lookup
 from agents.agent_types import AgentType
+# Import the prompt string
+from .prompts.system_prompt import SYSTEM_PROMPT
 
 class BatCucLinhSoAgent(BaseAgent):
     """
@@ -39,7 +41,7 @@ class BatCucLinhSoAgent(BaseAgent):
         Khởi tạo BatCucLinhSo Agent và các sub-agent của nó.
         """
         self.logger = get_logger(name)
-        instruction = get_agent_prompt(AgentType.BATCUCLINH_SO)
+        instruction = SYSTEM_PROMPT # Use the imported prompt
         
         # Instantiate Sub-Agents
         self.phone_agent = PhoneNumberAgent()
@@ -47,26 +49,26 @@ class BatCucLinhSoAgent(BaseAgent):
         self.bank_account_agent = BankAccountAgent()
         self.password_agent = PasswordAgent()
         
-        # Define tools - Now points to the main processing method
-        # We might not need FunctionTools here if RootAgent calls process directly
+        # Define tools 
         agent_tools = [
             FunctionTool(self.process_request) 
         ]
         
+        # Call BaseAgent constructor
         super().__init__(
             name=name,
             model_name=model_name,
             instruction=instruction,
-            tools=agent_tools # Simplified tool list
+            tools=agent_tools 
         )
 
-    def process_request(self, request: BatCuLinhSoRequest) -> Dict[str, Any]:
+    async def process_request(self, request: BatCuLinhSoRequest) -> Dict[str, Any]:
         """
         Phân tích loại yêu cầu và điều phối đến sub-agent phù hợp.
-
+        
         Args:
             request: Yêu cầu phân tích (Phone, CCCD, Bank, Password).
-
+            
         Returns:
             Kết quả từ sub-agent tương ứng.
         """
@@ -85,13 +87,16 @@ class BatCucLinhSoAgent(BaseAgent):
                  return {"error": "Hành động không xác định cho yêu cầu điện thoại."}
 
         elif isinstance(request, CCCDAnalysisRequest):
-            return self.cccd_agent.analyze_cccd(request)
+            # Ensure the cccd_agent instance is used
+            return await self.cccd_agent.analyze_cccd(request) # Added await if analyze_cccd is async
             
         elif isinstance(request, BankAccountRequest):
-            return self.bank_account_agent.analyze_bank_account(request)
+             # Ensure the bank_account_agent instance is used
+            return await self.bank_account_agent.analyze_bank_account(request) # Added await if analyze_bank_account is async
             
         elif isinstance(request, PasswordRequest):
-            return self.password_agent.generate_password(request)
+             # Ensure the password_agent instance is used
+            return await self.password_agent.generate_password(request) # Added await if generate_password is async
             
         else:
             self.logger.error(f"Loại yêu cầu không được hỗ trợ: {type(request).__name__}")

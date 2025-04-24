@@ -26,6 +26,9 @@ from shared_libraries.logger import get_logger
 from .sub_agents.profile_agent import ProfileAgent
 from .sub_agents.apikey_agent import APIKeyAgent
 
+# Import the prompt string
+from .prompts.system_prompt import SYSTEM_PROMPT
+
 # OAuth2 scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/user/token")
 
@@ -40,8 +43,9 @@ class UserAgent(BaseAgent):
         """
         Khởi tạo User Agent và các sub-agent.
         """
-        # Ensure BaseAgent is initialized correctly (adapt if BaseAgent structure changed)
-        super().__init__(name=name) # Assuming BaseAgent __init__ takes name
+        # Pass the imported SYSTEM_PROMPT to BaseAgent
+        # Adapt BaseAgent init signature if needed (e.g., if it expects model_name)
+        super().__init__(name=name, instruction=SYSTEM_PROMPT) 
         self.logger = get_logger(name)
         
         # Instantiate Sub-Agents

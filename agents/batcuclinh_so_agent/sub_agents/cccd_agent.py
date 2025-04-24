@@ -6,7 +6,9 @@ from typing import Any, Dict, List
 
 from shared_libraries.models import CCCDAnalysisRequest
 from shared_libraries.logger import get_logger
-from tools.batcuclinhso_analysis.number_analyzer import analyze_number_string
+# Assuming specific analyzer is used
+# from tools.batcuclinhso_analysis.number_analyzer import analyze_number_string
+from tools.batcuclinhso_analysis.cccd_analyzer import analyze_cccd_logic # Example name
 # No direct data import needed if only using analyzer
 
 class CCCDAgent:
@@ -42,8 +44,9 @@ class CCCDAgent:
              
         self.logger.info(f"Phân tích CCCD: {last_digits}")
         
-        # Use the number analyzer tool
-        analysis_result = analyze_number_string(last_digits)
+        # Use the specific cccd analyzer tool
+        # analysis_result = analyze_number_string(last_digits) <-- OLD
+        analysis_result = analyze_cccd_logic(last_digits) # <-- NEW (example)
         
         # Ý nghĩa tổng thể
         overall_meaning = self._get_cccd_overall_meaning(analysis_result["pairs_analysis"], analysis_result["total_score"])

@@ -4,10 +4,12 @@ Bank Account Sub-Agent for BatCucLinhSoAgent
 
 from typing import Any, Dict, List, Optional
 
-from ...shared_libraries.models import BankAccountRequest
-from ...shared_libraries.logger import get_logger
+from shared_libraries.models import BankAccountRequest
+from shared_libraries.logger import get_logger
 # Import Feng Shui data directly as logic is tightly coupled here
-from ...tools.batcuclinhso_analysis.fengshui_data import NUMBER_PAIRS_MEANING
+from tools.batcuclinhso_analysis.fengshui_data import NUMBER_PAIRS_MEANING
+# Assuming specific suggester tool is used
+from tools.batcuclinhso_analysis.bank_account_suggester import suggest_bank_account_pairs # Example name
 
 class BankAccountAgent:
     """
@@ -20,17 +22,20 @@ class BankAccountAgent:
     def analyze_bank_account(self, request: BankAccountRequest) -> Dict[str, Any]:
         """
         Đề xuất các cặp số cuối phù hợp cho số tài khoản ngân hàng.
-        
-        Args:
-            request (BankAccountRequest): Yêu cầu đề xuất số tài khoản.
-            
-        Returns:
-            Dict[str, Any]: Đề xuất các cặp số cuối và khuyến nghị.
+        (Now uses the suggester tool)
         """
         self.logger.info(f"Đề xuất cặp số cuối STK cho mục đích: {request.purpose}, Ngân hàng: {request.bank_name}")
         
-        suggested_pairs = []
-        purpose_lower = request.purpose.lower()
+        # Delegate to the specific suggester tool
+        suggestion_result = suggest_bank_account_pairs(request.purpose, request.preferred_digits, request.bank_name)
+        
+        # Return the result from the tool (adjust structure if needed)
+        return suggestion_result
+
+        # --- Removed old logic now handled by the tool --- 
+        # suggested_pairs = []
+        # purpose_lower = request.purpose.lower()
+        # ... (rest of old logic)
 
         # Define purpose mappings to good pairs
         purpose_pair_map = {

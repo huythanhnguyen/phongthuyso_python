@@ -9,7 +9,9 @@ from typing import Any, Dict, List, Optional
 # Corrected imports (relative paths adjusted)
 from shared_libraries.models import PhoneAnalysisRequest
 from shared_libraries.logger import get_logger # Assuming logger setup
-from tools.batcuclinhso_analysis.number_analyzer import analyze_number_string
+# Assuming specific analyzers are now used instead of generic number_analyzer
+# from tools.batcuclinhso_analysis.number_analyzer import analyze_number_string
+from tools.batcuclinhso_analysis.phone_analyzer import analyze_phone_logic # Example name
 from tools.batcuclinhso_analysis.fengshui_data import NUMBER_PAIRS_MEANING # For purpose matching
 
 class PhoneNumberAgent:
@@ -33,8 +35,8 @@ class PhoneNumberAgent:
         phone_number = request.phone_number
         self.logger.info(f"Phân tích số điện thoại: {phone_number}")
         
-        # Use the number analyzer tool
-        analysis_result = analyze_number_string(phone_number)
+        # Use the specific phone analyzer tool
+        analysis_result = analyze_phone_logic(phone_number)
         
         # Ý nghĩa 3 số cuối (Placeholder - Implement specific logic here)
         last_three_analysis = "Chưa có phân tích chi tiết cho 3 số cuối"
@@ -120,7 +122,7 @@ class PhoneNumberAgent:
         suggestions = []
         for phone in sample_phones:
             # Use internal analyze_phone (or just analyze_number_string if full analysis not needed)
-            analysis_result = analyze_number_string(phone)
+            analysis_result = analyze_phone_logic(phone)
             feng_shui_score = analysis_result["total_score"]
             
             # Tính mức độ phù hợp với mục đích

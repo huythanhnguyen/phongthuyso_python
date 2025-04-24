@@ -18,6 +18,9 @@ from shared_libraries.models import (
     UserManagementRequest # Union of Auth/Profile/APIKey requests 
     # ... add other top-level request types if needed
 )
+# Import the prompt string
+from .prompts.system_prompt import SYSTEM_PROMPT
+
 # Import agent instances (assuming a registry or direct imports)
 # This is complex, ideally use a registry pattern
 # from .registry import get_agent_instance 
@@ -34,7 +37,7 @@ class RootAgent(BaseAgent):
         Removed agent registration here - should be handled externally.
         """
         # Adapt BaseAgent initialization as needed
-        super().__init__(name=name, model_name=model_name, instruction="Root Agent dispatcher.") 
+        super().__init__(name=name, model_name=model_name, instruction=SYSTEM_PROMPT) 
         self.logger = get_logger(name)
         # self.agents registry might be populated externally or passed in
         self.agents: Dict[AgentType, BaseAgent] = {} 
