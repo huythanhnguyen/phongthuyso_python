@@ -77,14 +77,14 @@ class BatCucLinhSoAgent(BaseAgent):
         if isinstance(request, PhoneAnalysisRequest):
             # Check if it's analysis or suggestion based on request fields? 
             # For now, assume analyze_phone exists. Need refinement.
-             if hasattr(request, 'phone_number') and request.phone_number: # Basic check for analysis
-                 return self.phone_agent.analyze_phone(request)
-             elif hasattr(request, 'purpose'): # Basic check for suggestion
-                 # Assuming suggest_phone takes purpose and optional digits from the request object
-                 return self.phone_agent.suggest_phone(request.purpose, getattr(request, 'preferred_digits', None)) # TODO: Adjust suggest_phone signature or request model
-             else:
-                 self.logger.error("Không xác định được hành động cho PhoneAnalysisRequest")
-                 return {"error": "Hành động không xác định cho yêu cầu điện thoại."}
+            if hasattr(request, 'phone_number') and request.phone_number: # Basic check for analysis
+                return self.phone_agent.analyze_phone(request)
+            elif hasattr(request, 'purpose'): # Basic check for suggestion
+                # Assuming suggest_phone takes purpose and optional digits from the request object
+                return self.phone_agent.suggest_phone(request.purpose, getattr(request, 'preferred_digits', None)) # TODO: Adjust suggest_phone signature or request model
+            else:
+                self.logger.error("Không xác định được hành động cho PhoneAnalysisRequest")
+                return {"error": "Hành động không xác định cho yêu cầu điện thoại."}
 
         elif isinstance(request, CCCDAnalysisRequest):
             # Ensure the cccd_agent instance is used
@@ -103,9 +103,8 @@ class BatCucLinhSoAgent(BaseAgent):
             return {"error": f"Loại yêu cầu không được hỗ trợ: {type(request).__name__}"}
 
 # Instantiate the agent for easy import by root_agent
-# Ensure python_adk path is correct for your project structure
+# Đã thay đổi tên project từ python_adk thành phongthuyso_python
 # Example:
-# from python_adk.agents.batcuclinh_so_agent.agent import BatCucLinhSoAgent
-# batcuclinh_so_agent = BatCucLinhSoAgent()
+# from phongthuyso_python.agents.batcuclinh_so_agent.agent import BatCucLinhSoAgent
 # --- Remove direct instantiation if handled by a registry --- 
 # batcuclinh_so_agent = BatCucLinhSoAgent()

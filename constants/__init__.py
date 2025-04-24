@@ -1,1 +1,1 @@
-"""Constants for the Phong Thuy So application.""" 
+# Thư mục chứa các hằng số JS được nạp động qua js2py 

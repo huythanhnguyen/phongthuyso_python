@@ -13,7 +13,7 @@ from enum import Enum
 from google.adk.tools import FunctionTool
 
 # Local imports
-from python_adk.agents.root_agent.tools.intent_classifier import AgentType
+from agents.root_agent.tools.intent_classifier import AgentType
 
 
 class AgentRouter(FunctionTool):

@@ -17,7 +17,7 @@ if parent_dir not in sys.path:
 load_dotenv()
 
 # Import the FastAPI app
-from python_adk.main import app
+from main import app
 
 # This variable is what Render and other ASGI servers will look for
 application = app

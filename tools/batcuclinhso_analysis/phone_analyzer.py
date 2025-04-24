@@ -7,10 +7,10 @@ from typing import Dict, Any, List, Optional
 # Sử dụng Google ADK FunctionTool
 from google.adk.tools import FunctionTool
 import os
-from python_adk.constants.bat_tinh import BAT_TINH
-from python_adk.constants.combinations import COMBINATIONS
-from python_adk.constants.digit_meanings import DIGIT_MEANINGS
-from python_adk.constants.response_factors import RESPONSE_FACTORS
+from constants.bat_tinh import BAT_TINH
+from constants.combinations import COMBINATIONS
+from constants.digit_meanings import DIGIT_MEANINGS
+from constants.response_factors import RESPONSE_FACTORS
 
 class PhoneAnalyzer:
     """Class để phân tích số điện thoại theo phương pháp Bát Cục Linh Số"""

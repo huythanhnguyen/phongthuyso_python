@@ -4,7 +4,7 @@ Tool để phân tích số tài khoản ngân hàng dựa trên phương pháp 
 
 from google.adk.tools import FunctionTool
 from typing import Dict, Any, List, Optional
-from python_adk.mcp.common import extract_digits
+from utils.common import extract_digits
 
 def bank_account_analyzer(account_number: str) -> Dict[str, Any]:
     """

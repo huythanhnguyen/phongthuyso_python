@@ -4,8 +4,8 @@ CCCD Analyzer Tool for Bát Cục Linh Số method
 
 from google.adk.tools import FunctionTool
 from typing import Dict, Any, Optional
-from python_adk.constants.bat_tinh import BAT_TINH
-from python_adk.constants.combinations import COMBINATIONS
+from constants.bat_tinh import BAT_TINH
+from constants.combinations import COMBINATIONS
 
 def cccd_analyzer(cccd_number: str, purpose: Optional[str] = None) -> Dict[str, Any]:
     """Phân tích số CCCD theo phương pháp Bát Cục Linh Số.

@@ -4,7 +4,7 @@ Tool để phân tích mật khẩu dựa trên phương pháp Bát Cục Linh S
 
 from google.adk.tools import FunctionTool
 from typing import Dict, Any, List, Optional
-from python_adk.mcp.common import extract_digits
+from utils.common import extract_digits
 
 def password_analyzer(password: str) -> Dict[str, Any]:
     """

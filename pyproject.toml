@@ -3,7 +3,7 @@ requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [project]
-name = "python_adk"
+name = "phongthuyso_python"
 version = "0.1.0"
 description = "Hệ thống phân tích phong thủy số học qua Google ADK"
 authors = [
