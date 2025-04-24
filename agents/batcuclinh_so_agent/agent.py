@@ -17,7 +17,7 @@ from shared_libraries.models import (
     BankAccountRequest,
     PasswordRequest,
     # Define a base request or use Union for type hint
-    BatCuLinhSoRequest # Assuming a Union or Base class exists
+    BatCucLinhSoRequest # Assuming a Union or Base class exists
 )
 
 # Import Sub-Agents
@@ -62,7 +62,7 @@ class BatCucLinhSoAgent(BaseAgent):
             tools=agent_tools 
         )
 
-    async def process_request(self, request: BatCuLinhSoRequest) -> Dict[str, Any]:
+    async def process_request(self, request: BatCucLinhSoRequest) -> Dict[str, Any]:
         """
         Phân tích loại yêu cầu và điều phối đến sub-agent phù hợp.
         

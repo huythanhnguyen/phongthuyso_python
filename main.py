@@ -29,7 +29,7 @@ from agents.user_agent import UserAgent
 
 # Import request/response models from shared_libraries
 from shared_libraries.models import (
-    BatCuLinhSoRequest,
+    BatCucLinhSoRequest,
     PhoneAnalysisRequest,
     CCCDAnalysisRequest,
     BankAccountRequest,

@@ -12,7 +12,7 @@ from agents.base_agent import BaseAgent
 from shared_libraries.logger import get_logger
 # Import specific request models passed from the API layer
 from shared_libraries.models import (
-    BatCuLinhSoRequest, # Union of all BCLS requests
+    BatCucLinhSoRequest, # Union of all BCLS requests
     PaymentRequest,     # Union of all Payment requests
     SubscriptionRequest,
     UserManagementRequest # Union of Auth/Profile/APIKey requests 
@@ -74,7 +74,7 @@ class RootAgent(BaseAgent):
             if target_agent_type == AgentType.BAT_CUC_LINH_SO:
                 # Assuming BatCucLinhSoAgent has a process_request method
                 if hasattr(target_agent, 'process_request') and callable(target_agent.process_request):
-                    # Ensure request_data is the correct type (e.g., BatCuLinhSoRequest union)
+                    # Ensure request_data is the correct type (e.g., BatCucLinhSoRequest union)
                     return await target_agent.process_request(request_data)
                 else:
                      raise NotImplementedError(f"{target_agent_type.name} does not have a process_request method.")

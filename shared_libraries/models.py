@@ -32,9 +32,27 @@ class SubscriptionPlan(str, Enum):
     VIP = "vip"
 
 
-class PhoneAnalysisRequest(BaseModel):
+class BatCucLinhSoRequest(BaseModel):
+    """Model cơ sở cho các yêu cầu phân tích Bát Cục Linh Số"""
+    request_type: ServiceType
+    user_id: Optional[str] = None
+    context: Optional[Dict[str, Any]] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class BatCuLinhSoResponse(BaseModel):
+    """Model cơ sở cho các phản hồi phân tích Bát Cục Linh Số"""
+    status: str = "success"
+    message: str
+    analysis: Dict[str, Any]
+    recommendations: List[str]
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class PhoneAnalysisRequest(BatCucLinhSoRequest):
     """Model cho yêu cầu phân tích số điện thoại"""
     phone_number: str = Field(..., description="Số điện thoại cần phân tích")
+    request_type: ServiceType = ServiceType.PHONE_ANALYSIS
     
     @validator("phone_number")
     def validate_phone_number(cls, v):
@@ -46,9 +64,10 @@ class PhoneAnalysisRequest(BaseModel):
         return v
 
 
-class CCCDAnalysisRequest(BaseModel):
+class CCCDAnalysisRequest(BatCucLinhSoRequest):
     """Model cho yêu cầu phân tích CCCD"""
     cccd_last_digits: str = Field(..., description="6 chữ số cuối của CCCD cần phân tích")
+    request_type: ServiceType = ServiceType.CCCD_ANALYSIS
     
     @validator("cccd_last_digits")
     def validate_cccd_last_digits(cls, v):
@@ -60,20 +79,22 @@ class CCCDAnalysisRequest(BaseModel):
         return v
 
 
-class BankAccountRequest(BaseModel):
+class BankAccountRequest(BatCucLinhSoRequest):
     """Model cho yêu cầu phân tích hoặc đề xuất số tài khoản ngân hàng"""
     purpose: str = Field(..., description="Mục đích sử dụng tài khoản")
     bank_name: Optional[str] = Field(None, description="Tên ngân hàng (không bắt buộc)")
     preferred_digits: Optional[List[str]] = Field(None, description="Các chữ số ưa thích (không bắt buộc)")
+    request_type: ServiceType = ServiceType.BANK_ACCOUNT_ANALYSIS
 
 
-class PasswordRequest(BaseModel):
+class PasswordRequest(BatCucLinhSoRequest):
     """Model cho yêu cầu tạo hoặc phân tích mật khẩu theo phong thủy"""
     purpose: str = Field(..., description="Mục đích sử dụng mật khẩu")
     keywords: Optional[List[str]] = Field(None, description="Các từ khóa liên quan (không bắt buộc)")
     min_length: Optional[int] = Field(8, description="Độ dài tối thiểu của mật khẩu")
     require_special_chars: Optional[bool] = Field(True, description="Yêu cầu ký tự đặc biệt")
     require_numbers: Optional[bool] = Field(True, description="Yêu cầu chữ số")
+    request_type: ServiceType = ServiceType.PASSWORD_GENERATION
 
 
 class UserProfile(BaseModel):
