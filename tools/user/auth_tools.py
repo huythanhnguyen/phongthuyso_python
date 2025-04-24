@@ -1,11 +1,11 @@
 """
-Authentication Tools Module
+Authentication Tools
 
-Module chứa các công cụ xác thực cho User Agent
+Các công cụ xử lý xác thực người dùng.
 """
 
-import hashlib
 import base64
+import hashlib
 import json
 import time
 from typing import Any, Dict, Optional
@@ -13,7 +13,7 @@ from typing import Any, Dict, Optional
 
 def get_password_hash(password: str) -> str:
     """
-    Generate password hash.
+    Tạo hash cho mật khẩu.
     
     Args:
         password (str): Mật khẩu cần hash
@@ -27,7 +27,7 @@ def get_password_hash(password: str) -> str:
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
-    Verify password.
+    Xác minh mật khẩu.
     
     Args:
         plain_password (str): Mật khẩu plain text
@@ -41,7 +41,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def create_access_token(data: Dict[str, Any], expires_delta: Optional[int] = None) -> str:
     """
-    Create JWT token.
+    Tạo token JWT.
     
     Args:
         data (Dict[str, Any]): Dữ liệu cần encode
@@ -61,7 +61,7 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[int] = Non
 
 def decode_token(token: str) -> Optional[Dict[str, Any]]:
     """
-    Decode JWT token.
+    Giải mã token JWT.
     
     Args:
         token (str): Token JWT cần decode

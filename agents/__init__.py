@@ -1,8 +1,10 @@
 """
 Agents Package
 
-Chứa các agent cho hệ thống Phong Thủy Số
+Gói chứa các agent cho hệ thống Phong Thủy Số.
 """
+
+# Placeholder file
 
 # Import base classes or types if needed, avoid importing instances directly
 # from phongthuyso_python.agents.root_agent.agent import root_agent # OLD

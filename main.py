@@ -20,6 +20,9 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, EmailStr
 
+# Tạm thời bỏ qua các import của agent system vì đang gặp vấn đề
+# Các import này sẽ được khôi phục khi cấu trúc agent được sửa đúng
+"""
 # Import Agent System
 from agents.root_agent import RootAgent
 from agents.agent_types import AgentType
@@ -37,6 +40,7 @@ from shared_libraries.models import (
     PaymentRequest,
     SubscriptionRequest
 )
+"""
 
 # Khởi tạo các biến môi trường
 env_mode = os.environ.get("ENV_MODE", "dev")
@@ -49,6 +53,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Tạm thời bỏ qua khởi tạo agent system vì các file cần thiết đang thiếu
+"""
 # Khởi tạo hệ thống agent
 # Các agents chính
 root_agent = RootAgent(name="Root Agent", model_name="gemini-2.0-flash")
@@ -62,6 +68,8 @@ root_agent.register_agent(AgentType.PAYMENT, payment_agent)
 root_agent.register_agent(AgentType.USER, user_agent)
 
 logger.info("Agent system initialized successfully")
+"""
+logger.info("Agent system initialization skipped")
 
 # Khởi tạo ứng dụng FastAPI
 app = FastAPI(
