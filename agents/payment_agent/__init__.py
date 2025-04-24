@@ -4,4 +4,8 @@ Payment Agent Module
 Module quản lý agent cho xử lý thanh toán.
 """
 
-from python_adk.agents.payment_agent.agent import payment_agent 
+# Import class thay vì instance
+from .agent import PaymentAgent
+
+# Export class name
+__all__ = ['PaymentAgent'] 
