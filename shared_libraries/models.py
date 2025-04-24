@@ -138,4 +138,31 @@ class SessionData(BaseModel):
     is_authenticated: bool = False
     current_context: Dict[str, Any] = Field(default_factory=dict)
     conversation_history: List[Dict[str, Any]] = Field(default_factory=list)
-    last_activity: str 
+    last_activity: str
+
+
+class PaymentRequest(BaseModel):
+    """Model cho yêu cầu thanh toán"""
+    plan_id: str
+    payment_method: str
+    amount: float
+    currency: str = "VND"
+    user_id: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class SubscriptionRequest(BaseModel):
+    """Model cho yêu cầu đăng ký gói dịch vụ"""
+    plan_id: str
+    user_id: Optional[str] = None
+    auto_renew: bool = True
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class UserManagementRequest(BaseModel):
+    """Model cho yêu cầu quản lý người dùng"""
+    action: str  # login, register, update, delete
+    email: Optional[str] = None
+    password: Optional[str] = None
+    fullname: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None 
