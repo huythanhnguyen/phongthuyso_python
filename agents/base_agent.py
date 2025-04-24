@@ -18,17 +18,23 @@ class BaseAgent:
     def __init__(
         self,
         name: str,
-        agent_type: AgentType,
+        agent_type: Optional[AgentType] = None,
+        model_name: Optional[str] = None,
+        instruction: Optional[str] = None,
     ):
         """
         Khởi tạo BaseAgent
         
         Args:
             name (str): Tên của agent
-            agent_type (AgentType): Loại agent
+            agent_type (AgentType, optional): Loại agent
+            model_name (str, optional): Tên model để sử dụng
+            instruction (str, optional): Hướng dẫn hệ thống cho model
         """
         self.name = name
         self.agent_type = agent_type
+        self.model_name = model_name
+        self.instruction = instruction
         
         # Các thuộc tính mở rộng 
         self.current_context: Dict[str, Any] = {}

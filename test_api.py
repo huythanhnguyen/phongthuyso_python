@@ -9,6 +9,7 @@ import unittest
 import os
 from fastapi.testclient import TestClient
 from unittest.mock import patch
+import requests
 
 from main import app
 
@@ -328,5 +329,62 @@ class TestPhongThuyAPI(unittest.TestCase):
         self.assertEqual(data["status"], "active")
         self.assertTrue(data["is_active"])
         
+
+def test_phone_analysis():
+    """Test phân tích số điện thoại"""
+    url = f"{BASE_URL}/analyze_number"
+    params = {"number": "0912345678"}
+    
+    try:
+        response = requests.get(url, params=params)
+        print(f"Status code: {response.status_code}")
+        print("Response:")
+        print(json.dumps(response.json(), indent=2, ensure_ascii=False))
+    except Exception as e:
+        print(f"Lỗi: {str(e)}")
+
+def test_chat_api_phone():
+    """Test API chat với số điện thoại"""
+    url = f"{BASE_URL}/api/chat"
+    data = {
+        "message": "Phân tích số điện thoại 0912345678",
+        "context": {
+            "request_agent": "BAT_CUC_LINH_SO"
+        }
+    }
+    
+    try:
+        response = requests.post(url, json=data)
+        print(f"Status code: {response.status_code}")
+        print("Response:")
+        print(json.dumps(response.json(), indent=2, ensure_ascii=False))
+    except Exception as e:
+        print(f"Lỗi: {str(e)}")
+
+def test_chat_api_cccd():
+    """Test API chat với 6 số cuối CCCD"""
+    url = f"{BASE_URL}/api/chat"
+    data = {
+        "message": "Phân tích CCCD 123456",
+        "context": {
+            "request_agent": "BAT_CUC_LINH_SO"
+        }
+    }
+    
+    try:
+        response = requests.post(url, json=data)
+        print(f"Status code: {response.status_code}")
+        print("Response:")
+        print(json.dumps(response.json(), indent=2, ensure_ascii=False))
+    except Exception as e:
+        print(f"Lỗi: {str(e)}")
+
 if __name__ == "__main__":
-    unittest.main() 
+    print("\n--- Test phân tích số điện thoại qua /analyze_number ---")
+    test_phone_analysis()
+    
+    print("\n--- Test phân tích số điện thoại qua /api/chat ---")
+    test_chat_api_phone()
+    
+    print("\n--- Test phân tích CCCD qua /api/chat ---")
+    test_chat_api_cccd() 

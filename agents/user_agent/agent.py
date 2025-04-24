@@ -45,7 +45,11 @@ class UserAgent(BaseAgent):
         """
         # Pass the imported SYSTEM_PROMPT to BaseAgent
         # Adapt BaseAgent init signature if needed (e.g., if it expects model_name)
-        super().__init__(name=name, instruction=SYSTEM_PROMPT) 
+        super().__init__(
+            name=name, 
+            agent_type=AgentType.USER,
+            instruction=SYSTEM_PROMPT
+        ) 
         self.logger = get_logger(name)
         
         # Instantiate Sub-Agents

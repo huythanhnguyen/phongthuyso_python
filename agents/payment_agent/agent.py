@@ -51,9 +51,9 @@ class PaymentAgent(BaseAgent):
         # Gọi constructor của BaseAgent
         super().__init__(
             name=name,
+            agent_type=AgentType.PAYMENT,
             model_name=model_name,
-            instruction=instruction,
-            tools=agent_tools
+            instruction=instruction
         )
 
     def process_payment_request(self, request: PaymentRequest) -> Dict[str, Any]:

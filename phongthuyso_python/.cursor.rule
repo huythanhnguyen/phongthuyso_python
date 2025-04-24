@@ -1,0 +1,42 @@
+# Quy tắc cho dự án Phong Thủy Số
+
+## Quy tắc chung về code
+- Tuân thủ PEP 8 cho Python
+- Sử dụng type hints với mypy đúng cách
+- Sử dụng docstrings cho tất cả các hàm, lớp và module
+- Đặt tên biến, hàm và lớp có ý nghĩa và theo quy ước snake_case
+- Test các hàm trước khi commit
+- Không đưa thông tin nhạy cảm (API keys, credentials) vào code
+
+## Quy tắc đặc biệt
+### 01: Sử dụng Google ADK
+- KHÔNG tự viết code nếu đã có hàm sẵn có từ Google ADK
+- Ưu tiên sử dụng các API chính thức từ Google Generative AI và Google ADK
+- Tìm hiểu kỹ về các hàm của thư viện trước khi triển khai các giải pháp tùy chỉnh
+- Tận dụng đầy đủ khả năng của Google ADK để xử lý các yêu cầu về dữ liệu và AI
+
+### 02: Xử lý lỗi
+- KHÔNG sửa lỗi bằng cách tạo mock data hoặc bỏ luôn hàm
+- Phải xác định nguyên nhân gốc rễ của lỗi và sửa chúng
+- Sử dụng try/except với xử lý cụ thể, không bắt Exception chung
+- Ghi log đầy đủ thông tin lỗi để dễ dàng debug
+- Xử lý lỗi phải bao gồm recovery plan, không chỉ báo lỗi và kết thúc
+- Luôn kiểm tra lại sau khi sửa lỗi
+
+## Quy tắc về bảo mật
+- Luôn validate input từ người dùng
+- Sử dụng OAuth2 hoặc JWT đúng cách cho xác thực
+- Không lưu mật khẩu dưới dạng plaintext
+- Sử dụng HTTPS cho mọi kết nối API
+
+## Quy tắc về hiệu suất
+- Tối ưu hóa các truy vấn database
+- Sử dụng caching khi thích hợp
+- Tránh N+1 query problem
+- Xử lý bất đồng bộ cho các tác vụ tốn thời gian
+
+## Quy tắc về kiến trúc
+- Tuân thủ nguyên tắc SOLID
+- Tách biệt rõ ràng các tầng (presentation, business logic, data access)
+- Sử dụng dependency injection khi có thể
+- Tránh circular dependencies 

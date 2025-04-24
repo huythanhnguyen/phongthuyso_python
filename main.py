@@ -22,7 +22,6 @@ from pydantic import BaseModel, EmailStr
 
 # Tạm thời bỏ qua các import của agent system vì đang gặp vấn đề
 # Các import này sẽ được khôi phục khi cấu trúc agent được sửa đúng
-"""
 # Import Agent System
 from agents.root_agent import RootAgent
 from agents.agent_types import AgentType
@@ -40,7 +39,6 @@ from shared_libraries.models import (
     PaymentRequest,
     SubscriptionRequest
 )
-"""
 
 # Khởi tạo các biến môi trường
 env_mode = os.environ.get("ENV_MODE", "dev")
@@ -54,7 +52,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Tạm thời bỏ qua khởi tạo agent system vì các file cần thiết đang thiếu
-"""
 # Khởi tạo hệ thống agent
 # Các agents chính
 root_agent = RootAgent(name="Root Agent", model_name="gemini-2.0-flash")
@@ -68,7 +65,6 @@ root_agent.register_agent(AgentType.PAYMENT, payment_agent)
 root_agent.register_agent(AgentType.USER, user_agent)
 
 logger.info("Agent system initialized successfully")
-"""
 logger.info("Agent system initialization skipped")
 
 # Khởi tạo ứng dụng FastAPI
@@ -734,19 +730,51 @@ async def post_chat(
             context["is_premium"] = user.get("is_premium", False)
         
         # Tạo request cho RootAgent
-        # RootAgent sẽ phân tích ý định để xác định Agent con phù hợp
         direct_root_request = {
             "message": message,
             "context": context
         }
         
-        # Gọi trực tiếp đến RootAgent (không thông qua route_request)
-        response = await root_agent.process_direct_root_request(direct_root_request)
+        # Kiểm tra nếu request chỉ định agent cụ thể
+        target_agent_type = None
+        request_agent = context.get("request_agent")
+        if request_agent:
+            try:
+                target_agent_type = AgentType[request_agent]
+                logger.info(f"Routing to specific agent: {target_agent_type.name}")
+            except (KeyError, ValueError):
+                logger.warning(f"Invalid agent type specified: {request_agent}")
         
-        # Thêm thông tin user vào metadata
+        # Định tuyến request đến agent cụ thể nếu được chỉ định
+        if target_agent_type:
+            response = await root_agent.route_request(
+                target_agent_type=target_agent_type,
+                request_data=direct_root_request
+            )
+        else:
+            # Gọi trực tiếp đến RootAgent
+            response = await root_agent.process_direct_root_request(direct_root_request)
+        
+        # Đảm bảo response có đúng format
+        if not isinstance(response, dict):
+            response = {
+                "agent": "Root Agent",
+                "status": "success",
+                "content": str(response),
+                "metadata": context
+            }
+        
+        # Đảm bảo response có các trường bắt buộc
+        if "agent" not in response:
+            response["agent"] = "Root Agent"
+        if "status" not in response:
+            response["status"] = "success"
+        if "content" not in response:
+            response["content"] = "Không có nội dung phản hồi"
         if "metadata" not in response:
             response["metadata"] = {}
-            
+        
+        # Thêm thông tin user vào metadata
         if user:
             response["metadata"]["user_info"] = {
                 "email": user["email"], 
