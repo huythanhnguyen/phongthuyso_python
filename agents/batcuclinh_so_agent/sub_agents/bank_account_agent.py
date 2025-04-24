@@ -9,7 +9,7 @@ from shared_libraries.logger import get_logger
 # Import Feng Shui data directly as logic is tightly coupled here
 from tools.batcuclinhso_analysis.fengshui_data import NUMBER_PAIRS_MEANING
 # Assuming specific suggester tool is used
-from tools.batcuclinhso_analysis.bank_account_suggester import suggest_bank_account_pairs # Example name
+from tools.batcuclinhso_analysis.bank_account_suggester import bank_account_suggester # Tên hàm chính xác
 
 class BankAccountAgent:
     """
@@ -19,7 +19,7 @@ class BankAccountAgent:
     def __init__(self):
         self.logger = get_logger(self.__class__.__name__)
 
-    def analyze_bank_account(self, request: BankAccountRequest) -> Dict[str, Any]:
+    async def analyze_bank_account(self, request: BankAccountRequest) -> Dict[str, Any]:
         """
         Đề xuất các cặp số cuối phù hợp cho số tài khoản ngân hàng.
         (Now uses the suggester tool)
@@ -27,10 +27,44 @@ class BankAccountAgent:
         self.logger.info(f"Đề xuất cặp số cuối STK cho mục đích: {request.purpose}, Ngân hàng: {request.bank_name}")
         
         # Delegate to the specific suggester tool
-        suggestion_result = suggest_bank_account_pairs(request.purpose, request.preferred_digits, request.bank_name)
+        bank_code = request.bank_name or "VCB"  # Mặc định là VCB nếu không có
+        purpose = request.purpose or "personal"  # Mặc định là cá nhân
         
-        # Return the result from the tool (adjust structure if needed)
-        return suggestion_result
+        # Chuyển preferred_digits từ List[str] sang str nếu có
+        prefix = "".join(request.preferred_digits) if request.preferred_digits else None
+        
+        suggestion_result = bank_account_suggester(bank_code, prefix, None, purpose)
+        
+        # Bổ sung các trường cần thiết nếu không có trong kết quả API
+        if "suggestions" not in suggestion_result:
+            suggestion_result["suggestions"] = []
+            
+        # Tạo đề xuất từ kết quả
+        suggested_pairs = []
+        for account in suggestion_result.get("suggestions", []):
+            # Lấy 2 số cuối của mỗi tài khoản đề xuất
+            account_number = account.get("accountNumber", "")
+            if len(account_number) >= 2:
+                last_pair = account_number[-2:]
+                pair_info = NUMBER_PAIRS_MEANING.get(last_pair, {})
+                suggested_pairs.append({
+                    "pair": last_pair,
+                    "name": pair_info.get("name", "Không xác định"),
+                    "meaning": pair_info.get("meaning", "Không có thông tin"),
+                    "score": pair_info.get("score", 5.0)
+                })
+        
+        return {
+            "purpose": request.purpose,
+            "bank_name": request.bank_name,
+            "suggested_pairs": suggested_pairs[:5],  # Return top 5 unique suggestions
+            "recommendations": [
+                f"Nên ưu tiên chọn số tài khoản tại {request.bank_name or 'ngân hàng'} kết thúc bằng một trong các cặp số: {', '.join(p['pair'] for p in suggested_pairs[:3] if 'pair' in p)}...",
+                "Kết hợp các cặp số tốt liên tiếp (nếu có thể) sẽ tăng cường năng lượng tích cực.",
+                "Tránh các cặp số Tuyệt Mệnh (47, 74) trong số tài khoản."
+            ],
+            "suggested_accounts": [account.get("accountNumber") for account in suggestion_result.get("suggestions", [])]
+        }
 
         # --- Removed old logic now handled by the tool --- 
         # suggested_pairs = []
