@@ -9,7 +9,8 @@ import logging
 import os
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Enum
+from typing import Any, Dict, List, Optional
+from enum import Enum
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Query, Request, UploadFile, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware

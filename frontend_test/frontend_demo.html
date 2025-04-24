@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phong Thủy Số API Tester</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .container {
+            max-width: 1200px;
+            margin: 20px auto;
+        }
+        .response-container {
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            padding: 15px;
+            margin-top: 20px;
+            min-height: 150px;
+            max-height: 400px;
+            overflow: auto;
+            font-family: monospace;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .tab-content {
+            padding: 20px 0;
+        }
+        .nav-tabs {
+            margin-bottom: 20px;
+        }
+        pre {
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="mb-4">Phong Thủy Số API Tester</h1>
+        
+        <ul class="nav nav-tabs" id="apiTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="home-tab" data-bs-toggle="tab" data-bs-target="#home" type="button" role="tab">Trang chủ</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="analyze-tab" data-bs-toggle="tab" data-bs-target="#analyze" type="button" role="tab">Phân tích số</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="chat-tab" data-bs-toggle="tab" data-bs-target="#chat" type="button" role="tab">Chat</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="auth-tab" data-bs-toggle="tab" data-bs-target="#auth" type="button" role="tab">Đăng nhập/Đăng ký</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="user-tab" data-bs-toggle="tab" data-bs-target="#user" type="button" role="tab">Người dùng</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="apikey-tab" data-bs-toggle="tab" data-bs-target="#apikey" type="button" role="tab">API Key</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="payment-tab" data-bs-toggle="tab" data-bs-target="#payment" type="button" role="tab">Thanh toán</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="upload-tab" data-bs-toggle="tab" data-bs-target="#upload" type="button" role="tab">Upload</button>
+            </li>
+        </ul>
+        
+        <div class="tab-content" id="apiTabsContent">
+            <!-- Trang chủ -->
+            <div class="tab-pane fade show active" id="home" role="tabpanel">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header">Health Check</div>
+                            <div class="card-body">
+                                <button class="btn btn-primary" onclick="healthCheck()">Kiểm tra trạng thái</button>
+                            </div>
+                        </div>
+                        
+                        <div class="card">
+                            <div class="card-header">Lấy danh sách Agent</div>
+                            <div class="card-body">
+                                <button class="btn btn-primary" onclick="getAgents()">Lấy danh sách</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Kết quả</div>
+                            <div class="card-body">
+                                <div class="response-container" id="homeResponse"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Phân tích số -->
+            <div class="tab-pane fade" id="analyze" role="tabpanel">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Phân tích số điện thoại</div>
+                            <div class="card-body">
+                                <div class="form-group">
+                                    <label for="phoneNumber">Số điện thoại</label>
+                                    <input type="text" class="form-control" id="phoneNumber" placeholder="Nhập số điện thoại">
+                                </div>
+                                <div class="form-group">
+                                    <label for="userData">Dữ liệu người dùng (tùy chọn)</label>
+                                    <textarea class="form-control" id="userData" rows="3" placeholder='{"name": "Nguyễn Văn A", "birthdate": "1990-01-01"}'></textarea>
+                                </div>
+                                <button class="btn btn-primary" onclick="analyzeNumber()">Phân tích</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Kết quả</div>
+                            <div class="card-body">
+                                <div class="response-container" id="analyzeResponse"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Chat -->
+            <div class="tab-pane fade" id="chat" role="tabpanel">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Gửi tin nhắn chat</div>
+                            <div class="card-body">
+                                <div class="form-group">
+                                    <label for="chatMessage">Tin nhắn</label>
+                                    <input type="text" class="form-control" id="chatMessage" placeholder="Nhập tin nhắn">
+                                </div>
+                                <div class="form-group">
+                                    <label for="chatContext">Context (tùy chọn)</label>
+                                    <textarea class="form-control" id="chatContext" rows="3" placeholder='{"user_id": "user123"}'></textarea>
+                                </div>
+                                <button class="btn btn-primary" onclick="sendChat()">Gửi</button>
+                            </div>
+                        </div>
+                        
+                        <div class="card mt-3">
+                            <div class="card-header">Nhận kết quả chat</div>
+                            <div class="card-body">
+                                <div class="form-group">
+                                    <label for="sessionId">Session ID</label>
+                                    <input type="text" class="form-control" id="sessionId" placeholder="Nhập Session ID">
+                                </div>
+                                <button class="btn btn-primary" onclick="getChat()">Nhận kết quả</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Kết quả</div>
+                            <div class="card-body">
+                                <div class="response-container" id="chatResponse"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Đăng nhập/Đăng ký -->
+            <div class="tab-pane fade" id="auth" role="tabpanel">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header">Đăng ký người dùng</div>
+                            <div class="card-body">
+                                <div class="form-group">
+                                    <label for="registerEmail">Email</label>
+                                    <input type="email" class="form-control" id="registerEmail" placeholder="Email">
+                                </div>
+                                <div class="form-group">
+                                    <label for="registerFullname">Họ tên</label>
+                                    <input type="text" class="form-control" id="registerFullname" placeholder="Họ tên">
+                                </div>
+                                <div class="form-group">
+                                    <label for="registerPassword">Mật khẩu</label>
+                                    <input type="password" class="form-control" id="registerPassword" placeholder="Mật khẩu">
+                                </div>
+                                <button class="btn btn-primary" onclick="register()">Đăng ký</button>
+                            </div>
+                        </div>
+                        
+                        <div class="card">
+                            <div class="card-header">Đăng nhập</div>
+                            <div class="card-body">
+                                <div class="form-group">
+                                    <label for="loginEmail">Email</label>
+                                    <input type="email" class="form-control" id="loginEmail" placeholder="Email">
+                                </div>
+                                <div class="form-group">
+                                    <label for="loginPassword">Mật khẩu</label>
+                                    <input type="password" class="form-control" id="loginPassword" placeholder="Mật khẩu">
+                                </div>
+                                <button class="btn btn-primary" onclick="login()">Đăng nhập</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Kết quả</div>
+                            <div class="card-body">
+                                <div class="response-container" id="authResponse"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Người dùng -->
+            <div class="tab-pane fade" id="user" role="tabpanel">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header">Thông tin người dùng hiện tại</div>
+                            <div class="card-body">
+                                <button class="btn btn-primary" onclick="getUserInfo()">Lấy thông tin</button>
+                            </div>
+                        </div>
+                        
+                        <div class="card">
+                            <div class="card-header">Cập nhật thông tin người dùng</div>
+                            <div class="card-body">
+                                <div class="form-group">
+                                    <label for="updateEmail">Email (tùy chọn)</label>
+                                    <input type="email" class="form-control" id="updateEmail" placeholder="Email mới">
+                                </div>
+                                <div class="form-group">
+                                    <label for="updateFullname">Họ tên (tùy chọn)</label>
+                                    <input type="text" class="form-control" id="updateFullname" placeholder="Họ tên mới">
+                                </div>
+                                <div class="form-group">
+                                    <label for="updatePassword">Mật khẩu (tùy chọn)</label>
+                                    <input type="password" class="form-control" id="updatePassword" placeholder="Mật khẩu mới">
+                                </div>
+                                <button class="btn btn-primary" onclick="updateUser()">Cập nhật</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Kết quả</div>
+                            <div class="card-body">
+                                <div class="response-container" id="userResponse"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- API Key -->
+            <div class="tab-pane fade" id="apikey" role="tabpanel">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header">Tạo API Key</div>
+                            <div class="card-body">
+                                <div class="form-group">
+                                    <label for="apikeyName">Tên API Key</label>
+                                    <input type="text" class="form-control" id="apikeyName" placeholder="Tên API Key">
+                                </div>
+                                <button class="btn btn-primary" onclick="createApiKey()">Tạo API Key</button>
+                            </div>
+                        </div>
+                        
+                        <div class="card mb-3">
+                            <div class="card-header">Lấy danh sách API Key</div>
+                            <div class="card-body">
+                                <button class="btn btn-primary" onclick="listApiKeys()">Lấy danh sách</button>
+                            </div>
+                        </div>
+                        
+                        <div class="card">
+                            <div class="card-header">Xóa API Key</div>
+                            <div class="card-body">
+                                <div class="form-group">
+                                    <label for="deleteApiKeyId">API Key ID</label>
+                                    <input type="text" class="form-control" id="deleteApiKeyId" placeholder="API Key ID">
+                                </div>
+                                <button class="btn btn-danger" onclick="deleteApiKey()">Xóa API Key</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Kết quả</div>
+                            <div class="card-body">
+                                <div class="response-container" id="apikeyResponse"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Thanh toán -->
+            <div class="tab-pane fade" id="payment" role="tabpanel">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card mb-3">
+                            <div class="card-header">Lấy danh sách gói dịch vụ</div>
+                            <div class="card-body">
+                                <button class="btn btn-primary" onclick="listPlans()">Lấy danh sách</button>
+                            </div>
+                        </div>
+                        
+                        <div class="card mb-3">
+                            <div class="card-header">Lấy chi tiết gói dịch vụ</div>
+                            <div class="card-body">
+                                <div class="form-group">
+                                    <label for="planId">ID Gói dịch vụ</label>
+                                    <input type="text" class="form-control" id="planId" placeholder="ID Gói dịch vụ">
+                                </div>
+                                <button class="btn btn-primary" onclick="getPlan()">Lấy chi tiết</button>
+                            </div>
+                        </div>
+                        
+                        <div class="card mb-3">
+                            <div class="card-header">Tạo thanh toán</div>
+                            <div class="card-body">
+                                <div class="form-group">
+                                    <label for="paymentPlanId">ID Gói dịch vụ</label>
+                                    <input type="text" class="form-control" id="paymentPlanId" placeholder="ID Gói dịch vụ">
+                                </div>
+                                <div class="form-group">
+                                    <label for="paymentMethod">Phương thức thanh toán</label>
+                                    <input type="text" class="form-control" id="paymentMethod" placeholder="Phương thức thanh toán">
+                                </div>
+                                <div class="form-group">
+                                    <label for="paymentAmount">Số tiền</label>
+                                    <input type="number" class="form-control" id="paymentAmount" placeholder="Số tiền">
+                                </div>
+                                <button class="btn btn-primary" onclick="createPayment()">Tạo thanh toán</button>
+                            </div>
+                        </div>
+                        
+                        <div class="card mb-3">
+                            <div class="card-header">Lấy lịch sử thanh toán</div>
+                            <div class="card-body">
+                                <button class="btn btn-primary" onclick="getPaymentHistory()">Lấy lịch sử</button>
+                            </div>
+                        </div>
+                        
+                        <div class="card">
+                            <div class="card-header">Lấy thông tin đăng ký</div>
+                            <div class="card-body">
+                                <button class="btn btn-primary" onclick="getSubscription()">Lấy thông tin</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Kết quả</div>
+                            <div class="card-body">
+                                <div class="response-container" id="paymentResponse"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Upload -->
+            <div class="tab-pane fade" id="upload" role="tabpanel">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Upload file</div>
+                            <div class="card-body">
+                                <div class="form-group">
+                                    <label for="uploadFile">File</label>
+                                    <input type="file" class="form-control" id="uploadFile">
+                                </div>
+                                <div class="form-group">
+                                    <label for="fileType">Loại file</label>
+                                    <select class="form-control" id="fileType">
+                                        <option value="image">Ảnh</option>
+                                        <option value="pdf">PDF</option>
+                                        <option value="audio">Audio</option>
+                                        <option value="text">Text</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="fileMetadata">Metadata (tùy chọn)</label>
+                                    <textarea class="form-control" id="fileMetadata" rows="3" placeholder='{"description": "Ảnh mô tả"}'></textarea>
+                                </div>
+                                <button class="btn btn-primary" onclick="uploadFile()">Upload</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">Kết quả</div>
+                            <div class="card-body">
+                                <div class="response-container" id="uploadResponse"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="frontend_demo.js"></script>
+</body>
+</html> 
