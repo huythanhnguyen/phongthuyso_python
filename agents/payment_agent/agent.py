@@ -21,8 +21,8 @@ from shared_libraries.models import (
 )
 
 # Import payment tools from the correct location
-from tools.payment.payment_tools import create_payment # Corrected import
-from tools.payment.subscription_tools import get_subscription_status, update_subscription # Example tools
+from tools.payment.payment_tools import create_payment # Example tool
+from tools.payment.subscription_tools import get_user_active_subscription, update_subscription # Corrected import
 
 # Import the prompt string
 from .prompts.system_prompt import SYSTEM_PROMPT
@@ -77,7 +77,7 @@ class PaymentAgent(BaseAgent):
             return update_subscription(request.user_id, request.new_plan_id) # Call tool directly
         elif hasattr(request, 'user_id'):
             # return self.subscription_agent.get_subscription_status(request.user_id)
-            return get_subscription_status(request.user_id) # Call tool directly
+            return get_user_active_subscription(request.user_id) # Call tool directly with corrected function name
         else:
             self.logger.error(f"Unknown subscription request type: {request}")
             return {"error": "Unknown subscription request type"}

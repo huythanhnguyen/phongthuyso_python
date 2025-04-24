@@ -103,8 +103,8 @@ class BatCucLinhSoAgent(BaseAgent):
             return {"error": f"Loại yêu cầu không được hỗ trợ: {type(request).__name__}"}
 
 # Instantiate the agent for easy import by root_agent
-# Đã thay đổi tên project từ python_adk thành phongthuyso_python
+# Đã thay đổi tên project trong các imports
 # Example:
-# from phongthuyso_python.agents.batcuclinh_so_agent.agent import BatCucLinhSoAgent
+# from agents.batcuclinh_so_agent.agent import BatCucLinhSoAgent
 # --- Remove direct instantiation if handled by a registry --- 
 # batcuclinh_so_agent = BatCucLinhSoAgent()
