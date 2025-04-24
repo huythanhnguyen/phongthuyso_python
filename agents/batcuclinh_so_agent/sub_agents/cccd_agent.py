@@ -4,9 +4,9 @@ CCCD Sub-Agent for BatCucLinhSoAgent
 
 from typing import Any, Dict, List
 
-from ...shared_libraries.models import CCCDAnalysisRequest
-from ...shared_libraries.logger import get_logger
-from ...tools.batcuclinhso_analysis.number_analyzer import analyze_number_string
+from shared_libraries.models import CCCDAnalysisRequest
+from shared_libraries.logger import get_logger
+from tools.batcuclinhso_analysis.number_analyzer import analyze_number_string
 # No direct data import needed if only using analyzer
 
 class CCCDAgent:

@@ -6,10 +6,10 @@ import random
 import string
 from typing import Any, Dict, List
 
-from ...shared_libraries.models import PasswordRequest
-from ...shared_libraries.logger import get_logger
-from ...tools.batcuclinhso_analysis.number_analyzer import analyze_number_string
-from ...tools.batcuclinhso_analysis.fengshui_data import NUMBER_PAIRS_MEANING, SINGLE_NUMBER_MEANING
+from shared_libraries.models import PasswordRequest
+from shared_libraries.logger import get_logger
+from tools.batcuclinhso_analysis.number_analyzer import analyze_number_string
+from tools.batcuclinhso_analysis.fengshui_data import NUMBER_PAIRS_MEANING, SINGLE_NUMBER_MEANING
 
 class PasswordAgent:
     """

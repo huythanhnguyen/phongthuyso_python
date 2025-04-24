@@ -5,11 +5,12 @@ Phone Number Sub-Agent for BatCucLinhSoAgent
 from typing import Any, Dict, List, Optional
 
 # Import base agent, models, logger, tools etc. as needed
-# from ...agents.base_agent import BaseAgent # If inheriting
-from ...shared_libraries.models import PhoneAnalysisRequest
-from ...shared_libraries.logger import get_logger # Assuming logger setup
-from ...tools.batcuclinhso_analysis.number_analyzer import analyze_number_string
-from ...tools.batcuclinhso_analysis.fengshui_data import NUMBER_PAIRS_MEANING # For purpose matching
+# from agents.base_agent import BaseAgent # If inheriting
+# Corrected imports (relative paths adjusted)
+from shared_libraries.models import PhoneAnalysisRequest
+from shared_libraries.logger import get_logger # Assuming logger setup
+from tools.batcuclinhso_analysis.number_analyzer import analyze_number_string
+from tools.batcuclinhso_analysis.fengshui_data import NUMBER_PAIRS_MEANING # For purpose matching
 
 class PhoneNumberAgent:
     """

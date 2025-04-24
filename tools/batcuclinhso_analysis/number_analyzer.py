@@ -6,7 +6,7 @@ Provides functions for analyzing number strings based on Feng Shui principles.
 
 from typing import Dict, List, Any
 
-# Import the Feng Shui data
+# Import the Feng Shui data (relative import is correct here)
 from .fengshui_data import NUMBER_PAIRS_MEANING, SINGLE_NUMBER_MEANING
 
 def analyze_number_string(number_string: str) -> Dict[str, Any]:

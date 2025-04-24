@@ -8,10 +8,10 @@ from typing import Any, Dict, Union
 
 from google.adk.tools import FunctionTool # Keep for now, might remove later
 
-from python_adk.agents.base_agent import BaseAgent
-from python_adk.prompt import get_agent_prompt
-from python_adk.shared_libraries.logger import get_logger
-from python_adk.shared_libraries.models import (
+from agents.base_agent import BaseAgent
+from prompt import get_agent_prompt # Assuming get_agent_prompt is in project root's prompt.py
+from shared_libraries.logger import get_logger
+from shared_libraries.models import (
     PhoneAnalysisRequest,
     CCCDAnalysisRequest,
     BankAccountRequest,
@@ -27,7 +27,7 @@ from .sub_agents.bank_account_agent import BankAccountAgent
 from .sub_agents.password_agent import PasswordAgent
 
 # Import AgentType for prompt
-from python_adk.agents.agent_types import AgentType
+from agents.agent_types import AgentType
 
 class BatCucLinhSoAgent(BaseAgent):
     """

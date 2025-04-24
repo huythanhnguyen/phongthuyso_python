@@ -5,11 +5,11 @@ API Key Sub-Agent for UserAgent
 from typing import Any, Dict, List, Optional
 from fastapi import Header, HTTPException # For dependency injection if needed directly
 
-# Import necessary models and tools
-from ...shared_libraries.models import ApiKeyCreate
-from ...shared_libraries.logger import get_logger
-# Assuming the tool functions are accessible (adjust path if moved)
-from ..tools import (
+# Corrected imports
+from shared_libraries.models import ApiKeyCreate
+from shared_libraries.logger import get_logger
+# Update tool import paths
+from tools.user.api_key_tools import (
     create_api_key, 
     delete_api_key, 
     list_user_api_keys, 

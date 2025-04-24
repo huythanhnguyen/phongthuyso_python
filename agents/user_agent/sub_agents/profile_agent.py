@@ -4,11 +4,11 @@ Profile Sub-Agent for UserAgent
 
 from typing import Any, Dict
 
-# Import necessary models and tools
-from ...shared_libraries.models import UserUpdate
-from ...shared_libraries.logger import get_logger
-# Assuming the tool function is accessible (adjust path if moved)
-from ..tools import update_user 
+# Corrected imports
+from shared_libraries.models import UserUpdate
+from shared_libraries.logger import get_logger
+# Update tool import path
+from tools.user.user_tools import update_user 
 
 class ProfileAgent:
     """

@@ -4,8 +4,8 @@ Subscription Sub-Agent for PaymentAgent
 
 from typing import Any, Dict
 
-# from ...agents.base_agent import BaseAgent # Optional: Inherit if it needs agent capabilities
-# from ...shared_libraries.logger import get_logger # Import when logger is needed
+# from agents.base_agent import BaseAgent # Optional: Inherit if it needs agent capabilities
+# from shared_libraries.logger import get_logger # Import when logger is needed
 # Import relevant models (e.g., SubscriptionPlan, UserQuota) when implemented
 
 class SubscriptionAgent:

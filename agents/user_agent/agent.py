@@ -10,16 +10,18 @@ from typing import Any, Dict, List, Optional
 from fastapi import Depends, HTTPException, Header
 from fastapi.security import OAuth2PasswordBearer
 
-from python_adk.agents.agent_types import AgentType
-from python_adk.agents.base_agent import BaseAgent
-from python_adk.agents.user_agent.models import (
+from agents.agent_types import AgentType
+from agents.base_agent import BaseAgent
+from .models import (
     ApiKey, ApiKeyCreate, Token, TokenData, User, UserCreate, UserUpdate
 )
-from python_adk.agents.user_agent.tools import (
-    create_access_token, create_user, decode_token, 
-    get_user_by_email, verify_password
+from tools.user.auth_tools import (
+    create_access_token, decode_token, verify_password
 )
-from python_adk.shared_libraries.logger import get_logger
+from tools.user.user_tools import (
+    create_user, get_user_by_email 
+)
+from shared_libraries.logger import get_logger
 
 from .sub_agents.profile_agent import ProfileAgent
 from .sub_agents.apikey_agent import APIKeyAgent
