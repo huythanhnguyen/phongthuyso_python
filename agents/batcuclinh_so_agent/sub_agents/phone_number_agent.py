@@ -11,8 +11,26 @@ from shared_libraries.models import PhoneAnalysisRequest
 from shared_libraries.logger import get_logger # Assuming logger setup
 # Assuming specific analyzers are now used instead of generic number_analyzer
 # from tools.batcuclinhso_analysis.number_analyzer import analyze_number_string
-from tools.batcuclinhso_analysis.phone_analyzer import analyze_phone_logic # Example name
-from tools.batcuclinhso_analysis.fengshui_data import NUMBER_PAIRS_MEANING # For purpose matching
+from tools.batcuclinhso_analysis.phone_analyzer import phone_analyzer # Correct function name
+# Tạo định nghĩa NUMBER_PAIRS_MEANING nếu không có file fengshui_data.py
+NUMBER_PAIRS_MEANING = {
+    "19": {"name": "Đường Quan", "meaning": "Tốt cho công danh sự nghiệp", "score": 8},
+    "91": {"name": "Đường Quan", "meaning": "Tốt cho công danh sự nghiệp", "score": 8},
+    "28": {"name": "Sinh Khí", "meaning": "Tốt cho sức khỏe và phát triển", "score": 9},
+    "82": {"name": "Sinh Khí", "meaning": "Tốt cho sức khỏe và phát triển", "score": 9},
+    "37": {"name": "Diên Niên", "meaning": "Ổn định, bền vững", "score": 7},
+    "73": {"name": "Diên Niên", "meaning": "Ổn định, bền vững", "score": 7},
+    "46": {"name": "Thiên Y", "meaning": "Tốt cho sức khỏe, học tập", "score": 8},
+    "64": {"name": "Thiên Y", "meaning": "Tốt cho sức khỏe, học tập", "score": 8},
+    "38": {"name": "Phát Tài", "meaning": "Tốt cho tiền bạc, kinh doanh", "score": 9},
+    "83": {"name": "Phát Tài", "meaning": "Tốt cho tiền bạc, kinh doanh", "score": 9},
+    "29": {"name": "Thiên Mã", "meaning": "Tốt cho di chuyển, giao tiếp", "score": 8},
+    "92": {"name": "Thiên Mã", "meaning": "Tốt cho di chuyển, giao tiếp", "score": 8},
+    "47": {"name": "Tuyệt Mệnh", "meaning": "Xấu, nên tránh", "score": 2},
+    "74": {"name": "Tuyệt Mệnh", "meaning": "Xấu, nên tránh", "score": 2},
+    "39": {"name": "Khả Ái", "meaning": "Tốt cho tình cảm, hôn nhân", "score": 8},
+    "93": {"name": "Khả Ái", "meaning": "Tốt cho tình cảm, hôn nhân", "score": 8},
+}
 
 class PhoneNumberAgent:
     """
@@ -36,7 +54,7 @@ class PhoneNumberAgent:
         self.logger.info(f"Phân tích số điện thoại: {phone_number}")
         
         # Use the specific phone analyzer tool
-        analysis_result = analyze_phone_logic(phone_number)
+        analysis_result = phone_analyzer(phone_number)
         
         # Ý nghĩa 3 số cuối (Placeholder - Implement specific logic here)
         last_three_analysis = "Chưa có phân tích chi tiết cho 3 số cuối"
@@ -122,7 +140,7 @@ class PhoneNumberAgent:
         suggestions = []
         for phone in sample_phones:
             # Use internal analyze_phone (or just analyze_number_string if full analysis not needed)
-            analysis_result = analyze_phone_logic(phone)
+            analysis_result = phone_analyzer(phone)
             feng_shui_score = analysis_result["total_score"]
             
             # Tính mức độ phù hợp với mục đích
