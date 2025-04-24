@@ -21,7 +21,7 @@ from shared_libraries.models import (
 )
 
 # Import payment tools from the correct location
-from tools.payment.payment_tools import process_payment # Example tool
+from tools.payment.payment_tools import create_payment # Corrected import
 from tools.payment.subscription_tools import get_subscription_status, update_subscription # Example tools
 
 # Import the prompt string
@@ -62,8 +62,8 @@ class PaymentAgent(BaseAgent):
         (Placeholder Implementation)
         """
         self.logger.info(f"Processing payment request: {request}")
-        # TODO: Implement logic using payment tools (e.g., call Stripe API via process_payment)
-        # result = process_payment(request.amount, request.currency, request.source)
+        # TODO: Implement logic using payment tools (e.g., call Stripe API via create_payment)
+        # result = create_payment(request.user_id, request.payment_data)
         return {"status": "payment_processed", "transaction_id": "dummy_txn_123"} # Placeholder
         
     def process_subscription_request(self, request: SubscriptionRequest) -> Dict[str, Any]:
