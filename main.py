@@ -20,6 +20,24 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, EmailStr
 
+# Import Agent System
+from agents.root_agent import RootAgent
+from agents.agent_types import AgentType
+from agents.batcuclinh_so_agent import BatCucLinhSoAgent
+from agents.payment_agent import PaymentAgent
+from agents.user_agent import UserAgent
+
+# Import request/response models from shared_libraries
+from shared_libraries.models import (
+    BatCuLinhSoRequest,
+    PhoneAnalysisRequest,
+    CCCDAnalysisRequest,
+    BankAccountRequest,
+    PasswordRequest,
+    PaymentRequest,
+    SubscriptionRequest
+)
+
 # Khởi tạo các biến môi trường
 env_mode = os.environ.get("ENV_MODE", "dev")
 port = int(os.environ.get("PORT", 8000))
@@ -30,6 +48,20 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+# Khởi tạo hệ thống agent
+# Các agents chính
+root_agent = RootAgent(name="Root Agent", model_name="gemini-2.0-flash")
+batcuclinh_so_agent = BatCucLinhSoAgent(name="BatCucLinhSo Agent", model_name="gemini-2.0-flash")
+payment_agent = PaymentAgent(name="Payment Agent", model_name="gemini-2.0-flash")
+user_agent = UserAgent(name="User Agent")
+
+# Đăng ký sub-agents với Root Agent
+root_agent.register_agent(AgentType.BAT_CUC_LINH_SO, batcuclinh_so_agent)
+root_agent.register_agent(AgentType.PAYMENT, payment_agent)
+root_agent.register_agent(AgentType.USER, user_agent)
+
+logger.info("Agent system initialized successfully")
 
 # Khởi tạo ứng dụng FastAPI
 app = FastAPI(
@@ -557,6 +589,12 @@ async def get_agents():
             {
                 "name": "Root Agent",
                 "type": "root",
+                "description": "Agent chính điều phối các yêu cầu",
+                "sub_agents": [
+                    {"name": "BatCucLinhSo Agent", "type": "batcuclinh_so"},
+                    {"name": "Payment Agent", "type": "payment"},
+                    {"name": "User Agent", "type": "user"}
+                ]
             }
         ]
     }
@@ -594,7 +632,7 @@ async def analyze_number(
         # Reduce quota
         user["quota_remaining"] -= 1
     
-    # Original analyze logic
+    # Phân tích số điện thoại bằng BatCucLinhSoAgent
     try:
         user_data_dict = {}
         if user_data:
@@ -609,27 +647,30 @@ async def analyze_number(
                     }
                 )
 
-        # Xử lý phân tích số điện thoại đơn giản
-        digits = [int(digit) for digit in number if digit.isdigit()]
+        # Tạo request model
+        phone_request = PhoneAnalysisRequest(
+            phone_number=number,
+            **user_data_dict  # Thêm các trường bổ sung nếu có
+        )
         
-        # Tính tổng các chữ số
-        digit_sum = sum(digits)
+        # Gọi trực tiếp đến BatCucLinhSoAgent hoặc thông qua RootAgent
+        # Phương pháp 1: Sử dụng RootAgent để điều hướng
+        response = await root_agent.route_request(
+            target_agent_type=AgentType.BAT_CUC_LINH_SO,
+            request_data=phone_request
+        )
         
-        # Tính số chủ đạo (chữ số cuối cùng của tổng)
-        master_number = digit_sum % 9 or 9
-        
-        # Tạo phản hồi
-        return {
-            "agent": "Simple Agent",
-            "status": "success",
-            "content": f"Phân tích số điện thoại {number}: Số chủ đạo của bạn là {master_number}",
-            "metadata": {
-                "digits": digits,
-                "digit_sum": digit_sum,
-                "master_number": master_number,
-                "user_info": {"email": user["email"], "quota_remaining": user["quota_remaining"]} if user else None
+        # Thêm thông tin user vào metadata nếu cần
+        if "metadata" not in response:
+            response["metadata"] = {}
+            
+        if user:
+            response["metadata"]["user_info"] = {
+                "email": user["email"], 
+                "quota_remaining": user["quota_remaining"]
             }
-        }
+            
+        return response
         
     except Exception as e:
         logger.exception(f"Error analyzing number: {e}")
@@ -673,41 +714,38 @@ async def post_chat(
         # Reduce quota
         user["quota_remaining"] -= 1
     
-    # Original chat logic
+    # Xử lý chat thông qua RootAgent
     try:
-        # Mô phỏng xử lý tin nhắn đơn giản
         message = request.message
         context = request.context or {}
         
-        # Phân tích tin nhắn đơn giản (đây chỉ là mô phỏng)
-        response_content = f"Đã nhận tin nhắn: {message}"
+        # Thêm thông tin user vào context nếu có
+        if user:
+            context["user_id"] = user["id"]
+            context["user_email"] = user["email"]
+            context["is_premium"] = user.get("is_premium", False)
         
-        # Kiểm tra nếu tin nhắn chứa từ khóa "số điện thoại"
-        if "số điện thoại" in message.lower():
-            # Tìm số điện thoại trong tin nhắn (đơn giản hóa)
-            import re
-            phone_numbers = re.findall(r'\d{10,11}', message)
-            
-            if phone_numbers:
-                number = phone_numbers[0]
-                digits = [int(digit) for digit in number if digit.isdigit()]
-                digit_sum = sum(digits)
-                master_number = digit_sum % 9 or 9
-                
-                response_content = f"Số điện thoại {number} có số chủ đạo là {master_number}. Đây là số may mắn trong phong thủy."
-        
-        return {
-            "agent": "Phong Thuy Agent",
-            "status": "success",
-            "content": response_content,
-            "metadata": {
-                "confidence": 0.95,
-                "analysis_type": "text",
-                "user_id": context.get("user_id", "unknown"),
-                "session_id": context.get("session_id", "unknown"),
-                "user_info": {"email": user["email"], "quota_remaining": user["quota_remaining"]} if user else None
-            }
+        # Tạo request cho RootAgent
+        # RootAgent sẽ phân tích ý định để xác định Agent con phù hợp
+        direct_root_request = {
+            "message": message,
+            "context": context
         }
+        
+        # Gọi trực tiếp đến RootAgent (không thông qua route_request)
+        response = await root_agent.process_direct_root_request(direct_root_request)
+        
+        # Thêm thông tin user vào metadata
+        if "metadata" not in response:
+            response["metadata"] = {}
+            
+        if user:
+            response["metadata"]["user_info"] = {
+                "email": user["email"], 
+                "quota_remaining": user["quota_remaining"]
+            }
+            
+        return response
         
     except Exception as e:
         logger.exception(f"Error processing chat: {e}")
@@ -723,34 +761,36 @@ async def post_chat(
 async def stream_response(session_id: str):
     """Generate streaming responses."""
     try:
-        # Mô phỏng streaming response
-        responses = [
-            {
-                "agent": "Phong Thuy Agent",
-                "status": "streaming",
-                "content": "Đang phân tích...",
-                "is_final": False
-            },
-            {
-                "agent": "Phong Thuy Agent",
-                "status": "streaming",
-                "content": "Số điện thoại của bạn có các thành phần âm dương hài hòa.",
-                "is_final": False
-            },
-            {
-                "agent": "Phong Thuy Agent",
-                "status": "success",
-                "content": "Kết luận: Số điện thoại của bạn là một số may mắn theo phong thủy.",
-                "is_final": True
+        # Tạo request cho streaming
+        # Trong thực tế, có thể lấy lịch sử chat từ session_id
+        streaming_request = {
+            "message": "Phân tích số của tôi một cách chi tiết",
+            "context": {
+                "session_id": session_id,
+                "streaming": True
             }
-        ]
+        }
         
-        for response in responses:
-            # Định dạng event stream
-            yield f"data: {json.dumps(response)}\n\n"
-            # Chờ một chút để mô phỏng xử lý
+        # Chuẩn bị phản hồi khởi đầu
+        initial_response = {
+            "agent": "Root Agent",
+            "status": "streaming",
+            "content": "Đang xử lý yêu cầu của bạn...",
+            "is_final": False
+        }
+        yield f"data: {json.dumps(initial_response)}\n\n"
+        
+        # Gọi root_agent.process_direct_root_request với streaming=True
+        # Giả định rằng process_direct_root_request có thể trả về generator
+        # trong trường hợp streaming=True
+        streaming_generator = root_agent.stream_response(streaming_request)
+        
+        async for chunk in streaming_generator:
+            # Định dạng chunk thành streaming event
+            yield f"data: {json.dumps(chunk)}\n\n"
+            # Chờ một chút để mô phỏng xử lý (có thể bỏ trong production)
             import asyncio
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.1)
             
     except Exception as e:
         logger.exception(f"Error in streaming: {e}")
@@ -767,8 +807,13 @@ async def stream_response(session_id: str):
 async def get_chat(
     background_tasks: BackgroundTasks,
     session_id: str = Query(..., description="Session ID for the chat"),
+    message: Optional[str] = Query(None, description="Optional message for the chat"),
+    user_id: Optional[str] = Query(None, description="Optional user ID")
 ):
     """Get streaming responses from the agent system."""
+    # Có thể lưu message và context vào session storage ở đây
+    # Trong thực tế, có thể thực hiện kiểm tra quota và xác thực
+    
     return StreamingResponse(
         stream_response(session_id),
         media_type="text/event-stream"
