@@ -5,7 +5,7 @@ Profile Sub-Agent for UserAgent
 from typing import Any, Dict
 
 # Corrected imports
-from shared_libraries.models import UserUpdate
+from agents.user_agent.models import UserUpdate
 from shared_libraries.logger import get_logger
 # Update tool import path
 from tools.user.user_tools import update_user 
