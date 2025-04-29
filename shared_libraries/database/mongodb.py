@@ -87,6 +87,16 @@ async def init_db():
         await db.subscription.create_index("user_id")
         logger.info("Đã tạo collection 'subscription' thành công")
     
+    # Collection phoneAnalysis - lưu kết quả phân tích số điện thoại
+    if "phoneAnalysis" not in collections:
+        logger.info("Tạo collection 'phoneAnalysis'...")
+        await db.create_collection("phoneAnalysis")
+        # Tạo index để tìm kiếm nhanh theo userId và phoneNumber
+        await db.phoneAnalysis.create_index([("userId", 1), ("phoneNumber", 1)])
+        # Tạo index theo thời gian tạo để sắp xếp theo thời gian
+        await db.phoneAnalysis.create_index([("createdAt", -1)])
+        logger.info("Đã tạo collection 'phoneAnalysis' thành công")
+    
     return db
 
 async def close_connection():

@@ -1,48 +1,96 @@
 """
-Phone Number Sub-Agent for BatCucLinhSoAgent
+Phone Number Sub-Agent for BatCucLinhSoAgent sử dụng Model Context Protocol (MCP)
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
+import asyncio
+import logging
+from contextlib import AsyncExitStack
 
-# Import base agent, models, logger, tools etc. as needed
-# from agents.base_agent import BaseAgent # If inheriting
-# Corrected imports (relative paths adjusted)
 from shared_libraries.models import PhoneAnalysisRequest
-from shared_libraries.logger import get_logger # Assuming logger setup
-# Assuming specific analyzers are now used instead of generic number_analyzer
-# from tools.batcuclinhso_analysis.number_analyzer import analyze_number_string
-from tools.batcuclinhso_analysis.phone_analyzer import phone_analyzer # Correct function name
-# Tạo định nghĩa NUMBER_PAIRS_MEANING nếu không có file fengshui_data.py
-NUMBER_PAIRS_MEANING = {
-    "19": {"name": "Đường Quan", "meaning": "Tốt cho công danh sự nghiệp", "score": 8},
-    "91": {"name": "Đường Quan", "meaning": "Tốt cho công danh sự nghiệp", "score": 8},
-    "28": {"name": "Sinh Khí", "meaning": "Tốt cho sức khỏe và phát triển", "score": 9},
-    "82": {"name": "Sinh Khí", "meaning": "Tốt cho sức khỏe và phát triển", "score": 9},
-    "37": {"name": "Diên Niên", "meaning": "Ổn định, bền vững", "score": 7},
-    "73": {"name": "Diên Niên", "meaning": "Ổn định, bền vững", "score": 7},
-    "46": {"name": "Thiên Y", "meaning": "Tốt cho sức khỏe, học tập", "score": 8},
-    "64": {"name": "Thiên Y", "meaning": "Tốt cho sức khỏe, học tập", "score": 8},
-    "38": {"name": "Phát Tài", "meaning": "Tốt cho tiền bạc, kinh doanh", "score": 9},
-    "83": {"name": "Phát Tài", "meaning": "Tốt cho tiền bạc, kinh doanh", "score": 9},
-    "29": {"name": "Thiên Mã", "meaning": "Tốt cho di chuyển, giao tiếp", "score": 8},
-    "92": {"name": "Thiên Mã", "meaning": "Tốt cho di chuyển, giao tiếp", "score": 8},
-    "47": {"name": "Tuyệt Mệnh", "meaning": "Xấu, nên tránh", "score": 2},
-    "74": {"name": "Tuyệt Mệnh", "meaning": "Xấu, nên tránh", "score": 2},
-    "39": {"name": "Khả Ái", "meaning": "Tốt cho tình cảm, hôn nhân", "score": 8},
-    "93": {"name": "Khả Ái", "meaning": "Tốt cho tình cảm, hôn nhân", "score": 8},
-}
+from shared_libraries.logger import get_logger
+
+# Import MCP tools
+from google.adk.tools.mcp_tool.mcp_toolset import MCPToolset, StdioServerParameters
 
 class PhoneNumberAgent:
     """
-    Handles analysis and suggestions related to phone numbers.
+    Xử lý phân tích và đề xuất liên quan đến số điện thoại 
+    sử dụng MCP tools từ thư mục batcuclinhso_analysis
     """
     def __init__(self):
         self.logger = get_logger(self.__class__.__name__)
-        # Potentially initialize tools or data specific to phone analysis here
-
-    def analyze_phone(self, request: PhoneAnalysisRequest) -> Dict[str, Any]:
+        self.mcp_tools = None
+        self.exit_stack = None
+        self.initialized = False
+        
+    async def _get_mcp_tools_async(self) -> Tuple[List[Any], AsyncExitStack]:
         """
-        Phân tích số điện thoại theo nguyên lý Bát Cực Linh Số
+        Khởi tạo và trả về danh sách MCP tools và exit stack
+        Theo hướng dẫn MCP chính thức: tools và exit_stack nên được tạo cùng nhau
+        """
+        self.logger.info("Khởi tạo MCP toolset cho phân tích số điện thoại")
+        
+        # Đúng theo hướng dẫn, tạo stack và lấy tools trong cùng một hàm
+        tools, exit_stack = await MCPToolset.from_server(
+            connection_params=StdioServerParameters(
+                command='python',
+                args=[
+                    '-m', 'tools.batcuclinhso_analysis.phone_analyzer', 
+                ],
+            )
+        )
+        
+        self.logger.info(f"Đã khởi tạo {len(tools)} MCP tools cho phân tích số điện thoại")
+        return tools, exit_stack
+
+    async def initialize(self):
+        """
+        Khởi tạo kết nối đến MCP server phân tích số điện thoại
+        Tuân thủ theo mẫu trong tài liệu MCP
+        """
+        if self.initialized:
+            self.logger.info("MCP tools đã được khởi tạo trước đó")
+            return
+            
+        try:
+            # Tạo mới exit stack
+            self.exit_stack = AsyncExitStack()
+            
+            # Lấy MCP tools và quản lý exit stack của chúng
+            tools, tools_exit_stack = await self._get_mcp_tools_async()
+            
+            # Đăng ký exit stack của tools trong exit stack chính
+            await self.exit_stack.enter_async_context(tools_exit_stack)
+            
+            # Lưu lại tools để sử dụng sau này
+            self.mcp_tools = tools
+            self.initialized = True
+            
+            self.logger.info(f"Khởi tạo thành công MCP tools: {len(tools)} công cụ sẵn sàng")
+        except Exception as e:
+            self.logger.error(f"Lỗi khi khởi tạo MCP tools: {str(e)}")
+            if self.exit_stack:
+                await self.exit_stack.aclose()
+                self.exit_stack = None
+            raise e
+
+    async def cleanup(self):
+        """
+        Đóng kết nối đến MCP server
+        Đảm bảo giải phóng tài nguyên
+        """
+        if self.exit_stack:
+            self.logger.info("Đang đóng kết nối MCP server và giải phóng tài nguyên...")
+            await self.exit_stack.aclose()
+            self.exit_stack = None
+            self.mcp_tools = None
+            self.initialized = False
+            self.logger.info("Đã đóng kết nối MCP server thành công")
+
+    async def analyze_phone(self, request: PhoneAnalysisRequest) -> Dict[str, Any]:
+        """
+        Phân tích số điện thoại theo nguyên lý Bát Cực Linh Số sử dụng MCP tools
         
         Args:
             request (PhoneAnalysisRequest): Yêu cầu phân tích số điện thoại
@@ -53,15 +101,49 @@ class PhoneNumberAgent:
         phone_number = request.phone_number
         self.logger.info(f"Phân tích số điện thoại: {phone_number}")
         
+        # Đảm bảo MCP tools đã được khởi tạo
+        if not self.initialized:
+            await self.initialize()
+            
+        if not self.mcp_tools:
+            self.logger.error("MCP tools chưa được khởi tạo thành công")
+            return self._get_default_analysis(phone_number)
+        
         try:
-            # Use the specific phone analyzer tool
-            analysis_result = phone_analyzer(phone_number)
+            # Tìm công cụ phân tích số điện thoại trong danh sách MCP tools
+            phone_analyzer_tool = next(
+                (tool for tool in self.mcp_tools if tool.name == "analyze_phone_number"), 
+                None
+            )
             
-            # Ý nghĩa 3 số cuối (Placeholder - Implement specific logic here)
-            last_three_analysis = "Chưa có phân tích chi tiết cho 3 số cuối"
+            if not phone_analyzer_tool:
+                self.logger.error("Không tìm thấy công cụ analyze_phone_number trong MCP tools")
+                return self._get_default_analysis(phone_number)
+                
+            # Gọi công cụ MCP để phân tích số điện thoại
+            analysis_result = await phone_analyzer_tool.invoke(phone_number=phone_number)
             
-            # Ý nghĩa 5 số cuối (Placeholder - Implement specific logic here)
-            last_five_analysis = "Chưa có phân tích chi tiết cho 5 số cuối"
+            # Xử lý phân tích 3 số cuối sử dụng MCP tool nếu có
+            last_three_digits_tool = next(
+                (tool for tool in self.mcp_tools if tool.name == "analyze_last_three_digits"), 
+                None
+            )
+            
+            if last_three_digits_tool:
+                last_three_analysis = await last_three_digits_tool.invoke(phone_number=phone_number)
+            else:
+                last_three_analysis = "Chưa có phân tích chi tiết cho 3 số cuối"
+                
+            # Xử lý phân tích 5 số cuối sử dụng MCP tool nếu có  
+            last_five_digits_tool = next(
+                (tool for tool in self.mcp_tools if tool.name == "analyze_last_five_digits"), 
+                None
+            )
+            
+            if last_five_digits_tool:
+                last_five_analysis = await last_five_digits_tool.invoke(phone_number=phone_number)
+            else:
+                last_five_analysis = "Chưa có phân tích chi tiết cho 5 số cuối"
             
             # Đảm bảo các trường cần thiết tồn tại
             if "total_score" not in analysis_result:
@@ -84,10 +166,23 @@ class PhoneNumberAgent:
                     else:
                         pair_item["pair"] = "N/A"  # Giá trị mặc định nếu không có thông tin
             
-            recommendations = self._get_phone_recommendations(
-                analysis_result.get("total_score", 7.5), 
-                analysis_result.get("pairs_analysis", [])
+            # Lấy khuyến nghị từ MCP tool nếu có
+            recommendation_tool = next(
+                (tool for tool in self.mcp_tools if tool.name == "get_phone_recommendations"), 
+                None
             )
+            
+            if recommendation_tool:
+                recommendations = await recommendation_tool.invoke(
+                    score=analysis_result.get("total_score", 7.5),
+                    pairs_analysis=analysis_result.get("pairs_analysis", [])
+                )
+            else:
+                # Fallback nếu không có MCP tool tương ứng
+                recommendations = [
+                    "Đánh giá phong thủy dựa trên điểm số và các cặp số cụ thể.",
+                    f"Điểm tổng thể: {analysis_result.get('total_score', 7.5)}/10"
+                ]
             
             return {
                 "phone_number": phone_number,
@@ -102,199 +197,90 @@ class PhoneNumberAgent:
         except Exception as e:
             self.logger.error(f"Lỗi khi phân tích số điện thoại: {str(e)}")
             # Trả về giá trị mặc định nếu có lỗi
-            return {
-                "phone_number": phone_number,
-                "pairs_analysis": [],
-                "total_score": 5.0,
-                "luck_level": "Trung bình",
-                "last_three_digit_analysis": "Không thể phân tích",
-                "last_five_digit_analysis": "Không thể phân tích",
-                "recommendations": ["Không thể đưa ra khuyến nghị do lỗi phân tích."]
-            }
+            return self._get_default_analysis(phone_number)
 
-    def _get_phone_recommendations(self, score: float, pairs_analysis: List[Dict[str, Any]]) -> List[str]:
-        """
-        Tạo các khuyến nghị dựa trên phân tích số điện thoại
-        
-        Args:
-            score (float): Điểm tổng thể
-            pairs_analysis (List[Dict[str, Any]]): Phân tích từng cặp số
-            
-        Returns:
-            List[str]: Danh sách các khuyến nghị
-        """
-        recommendations = []
-        
-        # Nếu điểm tổng thể thấp
-        if score < 6:
-            recommendations.append("Số điện thoại này có điểm phong thủy thấp, nên cân nhắc thay đổi nếu có thể.")
-        
-        # Tìm cặp số Tuyệt Mệnh
-        has_bad_pair = False
-        for pair in pairs_analysis:
-            # Bỏ qua nếu pair không phải là dict
-            if not isinstance(pair, dict):
-                continue
-                
-            # Xác định tên của cặp số từ các key khác nhau
-            pair_name = None
-            if "name" in pair:
-                pair_name = pair.get("name")
-            elif "tinh" in pair:
-                pair_name = pair.get("tinh")
-                
-            if not pair_name:
-                continue
-                
-            if pair_name == "Tuyệt Mệnh" or pair_name == "TUYET_MENH":
-                # Lấy giá trị cặp số từ nhiều key khác nhau có thể
-                pair_value = None
-                if "number" in pair:
-                    pair_value = pair.get("number")
-                elif "originalPair" in pair:
-                    pair_value = pair.get("originalPair")
-                elif "pair" in pair:
-                    pair_value = pair.get("pair")
-                else:
-                    pair_value = "không xác định"
-                    
-                position_info = f"vị trí {pair.get('position', '')}" if pair.get("position") else ""
-                recommendations.append(f"Cặp số {pair_value} {position_info} là Tuyệt Mệnh, nên tránh.")
-                has_bad_pair = True
-        
-        # Nếu điểm cao và không có cặp xấu
-        if score >= 8 and not has_bad_pair:
-            recommendations.append("Đây là số điện thoại có phong thủy rất tốt, nên giữ lại.")
-        elif score >= 7 and not has_bad_pair:
-             recommendations.append("Đây là số điện thoại có phong thủy tốt.")
+    def _get_default_analysis(self, phone_number: str) -> Dict[str, Any]:
+        """Trả về phân tích mặc định nếu có lỗi"""
+        return {
+            "phone_number": phone_number,
+            "pairs_analysis": [],
+            "total_score": 5.0,
+            "luck_level": "Trung bình",
+            "last_three_digit_analysis": "Không thể phân tích",
+            "last_five_digit_analysis": "Không thể phân tích",
+            "recommendations": ["Không thể đưa ra khuyến nghị do lỗi phân tích."]
+        }
 
-        # Nếu có nhiều cặp số tốt
-        good_pairs_count = 0
-        for pair in pairs_analysis:
-            if not isinstance(pair, dict):
-                continue
-                
-            # Xử lý được nhiều dạng dữ liệu khác nhau
-            pair_score = 0
-            if "score" in pair and isinstance(pair["score"], (int, float)):
-                pair_score = pair["score"]
-            elif "energy" in pair and isinstance(pair["energy"], (int, float)):
-                pair_score = pair["energy"]
-                
-            if pair_score >= 8 or pair_score >= 3:
-                good_pairs_count += 1
-                
-        if good_pairs_count >= 3:
-            recommendations.append(f"Số điện thoại có {good_pairs_count} cặp số tốt, rất hợp phong thủy.")
-        
-        if not recommendations: # Default recommendation if none triggered
-            recommendations.append("Đánh giá phong thủy dựa trên điểm số và các cặp số cụ thể.")
-            
-        return recommendations
-        
-    def suggest_phone(self, purpose: str, preferred_digits: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    async def suggest_phone(self, purpose: str, preferred_digits: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         """
-        Đề xuất số điện thoại phù hợp với mục đích
+        Đề xuất số điện thoại phù hợp với mục đích sử dụng công cụ MCP
         
         Args:
             purpose (str): Mục đích sử dụng số điện thoại
-            preferred_digits (Optional[List[str]]): Các chữ số ưa thích (Not implemented yet)
+            preferred_digits (Optional[List[str]]): Các chữ số ưa thích
             
         Returns:
             List[Dict[str, Any]]: Danh sách số điện thoại đề xuất kèm phân tích
         """
         self.logger.info(f"Đề xuất số điện thoại cho mục đích: {purpose}")
         
-        # --- Placeholder for actual generation logic --- 
-        # Mẫu số điện thoại (sẽ thay bằng thuật toán thực tế)
-        # TODO: Implement actual phone number generation based on purpose/preferred_digits
+        # Đảm bảo MCP tools đã được khởi tạo
+        if not self.initialized:
+            await self.initialize()
+            
+        if not self.mcp_tools:
+            self.logger.error("MCP tools chưa được khởi tạo thành công")
+            return self._get_default_suggestions()
+        
+        try:
+            # Tìm công cụ đề xuất số điện thoại trong danh sách MCP tools
+            suggest_phone_tool = next(
+                (tool for tool in self.mcp_tools if tool.name == "suggest_phone_numbers"), 
+                None
+            )
+            
+            if not suggest_phone_tool:
+                self.logger.error("Không tìm thấy công cụ suggest_phone_numbers trong MCP tools")
+                return self._get_default_suggestions()
+            
+            # Gọi công cụ MCP để đề xuất số điện thoại
+            suggestions = await suggest_phone_tool.invoke(
+                purpose=purpose,
+                preferred_digits=preferred_digits if preferred_digits else []
+            )
+            
+            return suggestions[:5]  # Trả về 5 đề xuất tốt nhất
+            
+        except Exception as e:
+            self.logger.error(f"Lỗi khi đề xuất số điện thoại: {str(e)}")
+            return self._get_default_suggestions()
+
+    def _get_default_suggestions(self) -> List[Dict[str, Any]]:
+        """Trả về đề xuất mặc định nếu có lỗi"""
+        # Mẫu số điện thoại (mặc định nếu MCP tool không hoạt động)
         sample_phones = [
             "0901234567",
             "0912345678",
-            "0923456789",
-            "0934567890",
-            "0945678901"
+            "0923456789"
         ]
-        # --- End Placeholder ---
         
         suggestions = []
         for phone in sample_phones:
-            # Use internal analyze_phone (or just analyze_number_string if full analysis not needed)
-            analysis_result = phone_analyzer(phone)
-            feng_shui_score = analysis_result["total_score"]
-            
-            # Tính mức độ phù hợp với mục đích
-            purpose_match_score = self._calculate_purpose_match(phone, purpose)
-            
             suggestions.append({
                 "phone_number": phone,
-                "feng_shui_score": feng_shui_score,
-                "purpose_match_score": purpose_match_score,
-                "combined_score": round((feng_shui_score + purpose_match_score) / 2, 2),
-                "summary": f"Số {phone} điểm phong thủy {feng_shui_score:.1f}/10, phù hợp mục đích {purpose_match_score:.1f}/10."
+                "feng_shui_score": 7.0,
+                "purpose_match_score": 6.0,
+                "combined_score": 6.5,
+                "summary": f"Số {phone} được đề xuất mặc định do lỗi phân tích."
             })
         
-        # Sắp xếp theo điểm tổng hợp
-        suggestions.sort(key=lambda x: x["combined_score"], reverse=True)
+        return suggestions
         
-        return suggestions[:5]  # Trả về 5 đề xuất tốt nhất
-
-    def _calculate_purpose_match(self, phone: str, purpose: str) -> float:
-        """
-        Tính điểm phù hợp với mục đích
+    async def __aenter__(self):
+        """Hỗ trợ sử dụng phong cách async with"""
+        await self.initialize()
+        return self
         
-        Args:
-            phone (str): Số điện thoại
-            purpose (str): Mục đích sử dụng
-            
-        Returns:
-            float: Điểm phù hợp (0-10)
-        """
-        purpose_lower = purpose.lower()
-        digits_only = ''.join(filter(str.isdigit, phone))
-        if not digits_only:
-            return 0.0
-            
-        # Điểm cơ bản
-        score = 5.0 # Start from neutral
-        
-        # Define purpose keywords and associated good pairs
-        purpose_map = {
-            ("kinh doanh", "tài chính", "công ty"): ["Phát Tài", "Sinh Khí"],
-            ("sự nghiệp", "công việc", "thăng tiến"): ["Đường Quan", "Sinh Khí"],
-            ("học tập", "giáo dục", "nghiên cứu"): ["Thiên Y", "Diên Niên"],
-            ("tình cảm", "gia đình", "hôn nhân"): ["Khả Ái", "Diên Niên"],
-            ("sức khỏe", "y tế"): ["Thiên Y", "Sinh Khí"],
-        }
-        
-        relevant_good_pairs = set()
-        for keywords, pairs in purpose_map.items():
-            if any(keyword in purpose_lower for keyword in keywords):
-                relevant_good_pairs.update(pairs)
-
-        # Kiểm tra từng cặp số có phù hợp với mục đích không
-        pair_score_bonus = 0
-        num_pairs = 0
-        for i in range(len(digits_only) - 1):
-            pair = digits_only[i:i+2]
-            num_pairs += 1
-            if pair in NUMBER_PAIRS_MEANING:
-                info = NUMBER_PAIRS_MEANING[pair]
-                if info["name"] in relevant_good_pairs:
-                    pair_score_bonus += 0.75 # Increase bonus for relevant good pairs
-                elif info["name"] == "Tuyệt Mệnh":
-                    score -= 1.5 # Increase penalty for bad pairs
-        
-        # Normalize pair bonus by number of pairs and add to score
-        if num_pairs > 0:
-             score += (pair_score_bonus / num_pairs) * 5 # Scale bonus to max 5 points
-             
-        # Check last digit bonus (simplified)
-        last_digit = digits_only[-1]
-        if any(keyword in purpose_lower for keyword in ("kinh doanh", "tài chính")) and last_digit in ["8", "9"]:
-            score += 0.5
-        elif any(keyword in purpose_lower for keyword in ("sức khỏe",)) and last_digit in ["6", "9"]:
-            score += 0.5
-
-        # Giới hạn điểm (1-10)
-        return round(min(max(score, 1.0), 10.0), 1) 
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Đảm bảo dọn dẹp tài nguyên khi kết thúc phiên với with"""
+        await self.cleanup() 

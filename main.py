@@ -176,10 +176,13 @@ class UserBase(BaseModel):
     fullname: str
 
 
-class UserCreate(UserBase):
+class UserCreate(BaseModel):
     """Model for user creation."""
     
+    name: str
+    email: EmailStr
     password: str
+    phoneNumber: Optional[str] = None
 
 
 class UserUpdate(BaseModel):
@@ -190,16 +193,19 @@ class UserUpdate(BaseModel):
     password: Optional[str] = None
 
 
-class User(UserBase):
+class User(BaseModel):
     """User model."""
     
-    id: str
-    created_at: datetime
-    updated_at: datetime
-    is_active: bool
-    is_premium: bool
-    quota_remaining: int
-    
+    id: Optional[str] = None
+    name: str
+    email: EmailStr
+    role: str = "user"
+    phoneNumber: Optional[str] = None
+    remainingQuestions: int = 0
+    isPremium: bool = False
+    createdAt: datetime
+    lastLogin: Optional[datetime] = None
+    # Không trả về password
     class Config:
         from_attributes = True
 
@@ -448,31 +454,26 @@ async def validate_api_key(api_key: str = Header(..., convert_underscores=False)
 @app.post("/api/user/register", response_model=User)
 async def register_user(user: UserCreate):
     """Register a new user."""
-    # Kiểm tra email đã tồn tại chưa
     from shared_libraries.database.mongodb import db
     existing_user = await db.user.find_one({"email": user.email})
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
-    
     user_id = str(uuid.uuid4())
     hashed_password = get_password_hash(user.password)
-    
     user_data = {
         "id": user_id,
+        "name": user.name,
         "email": user.email,
-        "fullname": user.fullname,
-        "hashed_password": hashed_password,
-        "created_at": datetime.now(),
-        "updated_at": datetime.now(),
-        "is_active": True,
-        "is_premium": False,
-        "quota_remaining": mock_plans["free"]["quota"] 
+        "password": hashed_password,
+        "role": "user",
+        "phoneNumber": user.phoneNumber,
+        "remainingQuestions": mock_plans["free"]["quota"],
+        "isPremium": False,
+        "createdAt": datetime.now(),
+        "lastLogin": None
     }
-    
-    # Lưu vào MongoDB
     await db.user.insert_one(user_data)
-    
-    # Create subscription to free plan
+    # Tạo subscription như cũ nếu cần
     subscription_id = str(uuid.uuid4())
     subscription_data = {
         "id": subscription_id,
@@ -486,11 +487,11 @@ async def register_user(user: UserCreate):
         "is_active": True,
         "auto_renew": False
     }
-    
-    # Lưu subscription vào MongoDB
     await db.subscription.insert_one(subscription_data)
-    
-    return {**user_data, "hashed_password": ""}
+    # Trả về user không có password
+    user_data_to_return = user_data.copy()
+    user_data_to_return.pop("password", None)
+    return user_data_to_return
 
 
 @app.post("/api/user/token", response_model=Token)
@@ -680,14 +681,14 @@ async def analyze_number(
     # Check if user exists and has quota
     if user:
         # Check quota
-        if user["quota_remaining"] <= 0:
+        if user["remainingQuestions"] <= 0:
             raise HTTPException(
                 status_code=402,
                 detail="Quota exceeded. Please upgrade your subscription."
             )
         
         # Reduce quota
-        user["quota_remaining"] -= 1
+        user["remainingQuestions"] -= 1
     
     # Phân tích số điện thoại bằng BatCucLinhSoAgent
     try:
@@ -724,9 +725,47 @@ async def analyze_number(
         if user:
             response["metadata"]["user_info"] = {
                 "email": user["email"], 
-                "quota_remaining": user["quota_remaining"]
+                "remainingQuestions": user["remainingQuestions"]
             }
-            
+        
+        # Lưu kết quả phân tích vào MongoDB nếu user đã đăng nhập
+        if user:
+            try:
+                # Import service phân tích từ thư mục batcuclinhso_analysis
+                from tools.batcuclinhso_analysis.phone_analysis_db import save_phone_analysis
+                
+                # Chuẩn bị dữ liệu kết quả phân tích
+                analysis_result = {
+                    "starSequence": response.get("analysis", {}).get("star_sequence", []),
+                    "energyLevel": response.get("analysis", {}).get("energy_level", {}),
+                    "balance": response.get("analysis", {}).get("balance", ""),
+                    "starCombinations": response.get("analysis", {}).get("star_combinations", []),
+                    "keyCombinations": response.get("analysis", {}).get("key_combinations", []),
+                    "dangerousCombinations": response.get("analysis", {}).get("dangerous_combinations", []),
+                    "keyPositions": response.get("analysis", {}).get("key_positions", {}),
+                    "last3DigitsAnalysis": response.get("analysis", {}).get("last_3_digits", {}),
+                    "specialAttribute": response.get("analysis", {}).get("special_attribute", "")
+                }
+                
+                # Lấy phản hồi từ API
+                gemini_response = response.get("message", "")
+                
+                # Lưu vào database
+                analysis_id = await save_phone_analysis(
+                    user_id=user["id"],
+                    phone_number=number,
+                    analysis_result=analysis_result,
+                    gemini_response=gemini_response
+                )
+                
+                # Thêm ID phân tích vào response
+                response["metadata"]["analysis_id"] = analysis_id
+                logger.info(f"Đã lưu phân tích số {number} với ID: {analysis_id}")
+                
+            except Exception as e:
+                logger.error(f"Lỗi khi lưu phân tích số điện thoại: {e}")
+                # Không raise exception ở đây, chỉ log lỗi và tiếp tục trả về kết quả
+                
         return response
         
     except Exception as e:
@@ -762,14 +801,14 @@ async def post_chat(
     # Check if user exists and has quota
     if user:
         # Check quota
-        if user["quota_remaining"] <= 0:
+        if user["remainingQuestions"] <= 0:
             raise HTTPException(
                 status_code=402,
                 detail="Quota exceeded. Please upgrade your subscription."
             )
         
         # Reduce quota
-        user["quota_remaining"] -= 1
+        user["remainingQuestions"] -= 1
     
     # Xử lý chat thông qua RootAgent
     try:
@@ -780,7 +819,7 @@ async def post_chat(
         if user:
             context["user_id"] = user["id"]
             context["user_email"] = user["email"]
-            context["is_premium"] = user.get("is_premium", False)
+            context["is_premium"] = user.get("isPremium", False)
         
         # Tạo request cho RootAgent
         direct_root_request = {
@@ -831,7 +870,7 @@ async def post_chat(
         if user:
             response["metadata"]["user_info"] = {
                 "email": user["email"], 
-                "quota_remaining": user["quota_remaining"]
+                "remainingQuestions": user["remainingQuestions"]
             }
             
         return response
@@ -1173,8 +1212,8 @@ async def create_payment(
     
     # Update user status and quota
     user_data = mock_users[current_user["email"]]
-    user_data["is_premium"] = plan["type"] != "free"
-    user_data["quota_remaining"] = plan["quota"]
+    user_data["isPremium"] = plan["type"] != "free"
+    user_data["remainingQuestions"] = plan["quota"]
     user_data["updated_at"] = datetime.now()
     
     return payment_data
@@ -1200,4 +1239,110 @@ async def get_active_subscription(current_user: User = Depends(get_current_activ
             subscription["status"] == "active"):
             return subscription
     
-    return None 
+    return None
+
+
+# Cập nhật route để lấy lịch sử phân tích
+@app.get("/api/phone-analysis/history", response_model=List[Dict[str, Any]])
+async def get_phone_analysis_history(
+    limit: int = Query(10, description="Số lượng kết quả tối đa", ge=1, le=100),
+    skip: int = Query(0, description="Số lượng kết quả bỏ qua", ge=0),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Lấy lịch sử phân tích số điện thoại của người dùng."""
+    try:
+        from tools.batcuclinhso_analysis.phone_analysis_db import get_user_analyses
+        
+        # Lấy danh sách phân tích từ database
+        analyses = await get_user_analyses(user_id=current_user["id"], limit=limit, skip=skip)
+        
+        return analyses
+    except Exception as e:
+        logger.exception(f"Lỗi khi lấy lịch sử phân tích: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Lỗi khi lấy lịch sử phân tích: {str(e)}"
+        )
+
+# Cập nhật route để lấy chi tiết một phân tích
+@app.get("/api/phone-analysis/{phone_number}", response_model=Dict[str, Any])
+async def get_phone_analysis_detail(
+    phone_number: str,
+    current_user: User = Depends(get_current_active_user)
+):
+    """Lấy chi tiết phân tích của một số điện thoại."""
+    try:
+        from tools.batcuclinhso_analysis.phone_analysis_db import get_phone_analysis
+        
+        # Làm sạch số điện thoại, loại bỏ khoảng trắng và ký tự đặc biệt
+        phone_number = "".join(char for char in phone_number if char.isdigit())
+        
+        # Lấy phân tích từ database
+        analysis = await get_phone_analysis(user_id=current_user["id"], phone_number=phone_number)
+        
+        if not analysis:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Không tìm thấy phân tích cho số điện thoại {phone_number}"
+            )
+            
+        return analysis
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Lỗi khi lấy chi tiết phân tích: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Lỗi khi lấy chi tiết phân tích: {str(e)}"
+        )
+
+# Thêm endpoint API cho BatCucLinhSoAgent
+@app.post("/api/batcuclinh_so/analyze_phone")
+async def analyze_phone(
+    request: PhoneAnalysisRequest,
+    current_user: Optional[User] = Depends(get_current_user),
+    api_key: Optional[str] = Header(None, convert_underscores=False)
+):
+    """Phân tích số điện thoại sử dụng BatCucLinhSoAgent."""
+    # Kiểm tra xác thực - hoặc thông qua current_user hoặc api_key
+    if not current_user and not api_key:
+        raise HTTPException(
+            status_code=401,
+            detail="Bạn cần đăng nhập hoặc cung cấp API key"
+        )
+    
+    # Xác thực bằng API key nếu không có current_user
+    user = None
+    if not current_user and api_key:
+        try:
+            user = await validate_api_key(api_key)
+        except HTTPException as e:
+            raise e
+    else:
+        user = current_user
+    
+    # Kiểm tra quota nếu cần
+    if user and 'remainingQuestions' in user and user['remainingQuestions'] <= 0 and not user.get('isPremium', False):
+        raise HTTPException(
+            status_code=402,
+            detail="Bạn đã hết số lần phân tích. Vui lòng nâng cấp tài khoản."
+        )
+    
+    try:
+        # Gọi trực tiếp đến BatCucLinhSoAgent
+        response = await root_agent.route_request(
+            target_agent_type=AgentType.BAT_CUC_LINH_SO,
+            request_data=request
+        )
+        
+        # Giảm quota nếu cần
+        if user and 'remainingQuestions' in user and not user.get('isPremium', False):
+            user['remainingQuestions'] -= 1
+        
+        return response
+    except Exception as e:
+        logger.exception(f"Lỗi khi phân tích số điện thoại: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Lỗi khi phân tích số điện thoại: {str(e)}"
+        ) 

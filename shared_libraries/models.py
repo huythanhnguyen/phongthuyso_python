@@ -7,6 +7,7 @@ Module chứa các Pydantic models dùng cho xác thực dữ liệu và typing.
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel, Field, validator
+from datetime import datetime
 
 
 class ServiceType(str, Enum):
@@ -165,4 +166,52 @@ class UserManagementRequest(BaseModel):
     email: Optional[str] = None
     password: Optional[str] = None
     fullname: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None 
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class PhoneAnalysisResult(BaseModel):
+    """Model chi tiết kết quả phân tích số điện thoại"""
+    starSequence: List[Any] = []
+    energyLevel: Dict[str, Any] = {}
+    balance: Optional[str] = None
+    starCombinations: List[Any] = []
+    keyCombinations: List[Any] = []
+    dangerousCombinations: List[Any] = []
+    keyPositions: Dict[str, Any] = {}
+    last3DigitsAnalysis: Dict[str, Any] = {}
+    specialAttribute: Optional[str] = None
+
+
+class PhoneAnalysis(BaseModel):
+    """Model lưu trữ kết quả phân tích số điện thoại"""
+    userId: str
+    phoneNumber: str
+    result: PhoneAnalysisResult
+    geminiResponse: Optional[str] = None
+    createdAt: datetime = Field(default_factory=datetime.now)
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "userId": "dd060dde-80a4-4a08-b114-fe600f3967bb",
+                "phoneNumber": "0987654321",
+                "result": {
+                    "starSequence": [9, 8, 7, 6, 5, 4, 3, 2, 1],
+                    "energyLevel": {"overall": "cao", "chi_tiết": {}},
+                    "balance": "rất cân bằng",
+                    "starCombinations": ["9-8: Cát tinh"],
+                    "keyCombinations": ["4-3-2: Thành công"],
+                    "dangerousCombinations": [],
+                    "keyPositions": {"đầu": "tốt", "giữa": "tốt", "cuối": "tốt"},
+                    "last3DigitsAnalysis": {"ý nghĩa": "may mắn"},
+                    "specialAttribute": "Số quý nhân phù trợ"
+                },
+                "geminiResponse": "Đây là số điện thoại có năng lượng cao...",
+                "createdAt": "2025-04-29T13:00:00.000Z"
+            }
+        }
+
+
+# Định nghĩa index khi được sử dụng trong MongoDB
+# db.phoneAnalysis.createIndex({ userId: 1, phoneNumber: 1 })
+# db.phoneAnalysis.createIndex({ createdAt: -1 }) 

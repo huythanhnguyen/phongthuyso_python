@@ -18,7 +18,7 @@ async def create_test_user():
         
         user_data = {
             "email": "thanh@124.com",
-            "fullname": "Thanh Test",
+            "name": "Thanh Test",
             "password": "123456"
         }
         
