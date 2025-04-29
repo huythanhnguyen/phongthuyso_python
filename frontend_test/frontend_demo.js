@@ -1,466 +1,464 @@
-// Cấu hình API 
-let API_URL = localStorage.getItem('apiBaseUrl') || 'http://localhost:8000';
-let accessToken = localStorage.getItem('accessToken') || '';
+// Cấu hình
+const config = {
+    apiUrl: localStorage.getItem('apiUrl') || 'http://localhost:8000',
+    accessToken: () => localStorage.getItem('accessToken') || null
+};
 
-// Helper functions
-function displayResponse(elementId, data, isError = false) {
-    const element = document.getElementById(elementId);
-    element.innerHTML = '';
-    
-    try {
-        const formattedJson = JSON.stringify(data, null, 2);
-        const pre = document.createElement('pre');
-        
-        if (isError) {
-            pre.style.color = 'red';
-        }
-        
-        pre.textContent = formattedJson;
-        element.appendChild(pre);
-    } catch (error) {
-        element.textContent = typeof data === 'string' ? data : 'Lỗi hiển thị dữ liệu';
-    }
-}
-
-// Khi trang web được tải, đặt giá trị API URL vào input
-document.addEventListener('DOMContentLoaded', function() {
-    document.getElementById('apiBaseUrl').value = API_URL;
-    displayResponse('configResponse', { 
-        current_api_url: API_URL,
-        access_token_status: accessToken ? 'Đã có' : 'Chưa đăng nhập'
-    });
-});
-
-// Hàm cập nhật API URL
+// Cập nhật URL API
 function updateApiUrl() {
-    const newApiUrl = document.getElementById('apiBaseUrl').value.trim();
-    
-    if (!newApiUrl) {
-        displayResponse('configResponse', { error: 'Vui lòng nhập API URL' }, true);
-        return;
+    const newUrl = document.getElementById('apiBaseUrl').value;
+    if (newUrl) {
+        localStorage.setItem('apiUrl', newUrl);
+        config.apiUrl = newUrl;
+        document.getElementById('configResponse').innerHTML = `<pre>API URL đã được cập nhật: ${newUrl}</pre>`;
     }
-    
-    // Kiểm tra URL có hợp lệ không
-    try {
-        new URL(newApiUrl);
-    } catch (e) {
-        displayResponse('configResponse', { error: 'URL không hợp lệ' }, true);
-        return;
-    }
-    
-    // Lưu URL mới
-    API_URL = newApiUrl;
-    localStorage.setItem('apiBaseUrl', API_URL);
-    
-    displayResponse('configResponse', { 
-        message: 'API URL đã được cập nhật',
-        current_api_url: API_URL
-    });
 }
 
-async function fetchAPI(endpoint, options = {}) {
+// Hàm helper để hiển thị kết quả
+function displayResponse(containerId, response, error = false) {
+    const container = document.getElementById(containerId);
+    let content = '';
+    
+    if (error) {
+        content = `<div class="alert alert-danger">${response}</div>`;
+    } else {
+        try {
+            // Kiểm tra nếu response là string và có thể parse thành JSON
+            if (typeof response === 'string' && response.trim().startsWith('{')) {
+                const json = JSON.parse(response);
+                content = `<pre>${JSON.stringify(json, null, 2)}</pre>`;
+            } else if (typeof response === 'object') {
+                content = `<pre>${JSON.stringify(response, null, 2)}</pre>`;
+            } else {
+                content = `<pre>${response}</pre>`;
+            }
+        } catch (e) {
+            content = `<pre>${response}</pre>`;
+        }
+    }
+    
+    container.innerHTML = content;
+}
+
+// Hàm helper để gọi API
+async function callApi(endpoint, method = 'GET', body = null, requiresAuth = false, formData = false) {
     try {
-        // Thêm access token nếu có
-        if (accessToken && !endpoint.includes('/api/user/token') && !endpoint.includes('/api/user/register')) {
-            options.headers = options.headers || {};
-            options.headers['Authorization'] = `Bearer ${accessToken}`;
+        const headers = {};
+        
+        if (!formData) {
+            headers['Content-Type'] = 'application/json';
         }
         
-        const response = await fetch(`${API_URL}${endpoint}`, options);
-        const data = await response.json();
+        if (requiresAuth) {
+            const token = config.accessToken();
+            if (!token) {
+                throw new Error('Bạn cần đăng nhập để thực hiện hành động này');
+            }
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+        
+        const options = {
+            method,
+            headers,
+        };
+        
+        if (body) {
+            if (formData) {
+                options.body = body; // FormData đã được set
+            } else {
+                options.body = JSON.stringify(body);
+            }
+        }
+        
+        const response = await fetch(`${config.apiUrl}${endpoint}`, options);
+        
+        // Xử lý response
+        let data;
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+            data = await response.json();
+        } else {
+            data = await response.text();
+        }
         
         if (!response.ok) {
-            throw data;
+            throw new Error(data.detail || data.message || 'Có lỗi xảy ra');
         }
         
         return data;
     } catch (error) {
-        console.error('Fetch error:', error);
-        return { error: error.detail || error.message || 'Lỗi không xác định' };
+        throw error;
     }
 }
 
-// API Functions
-
-// Home Tab
+// Health Check
 async function healthCheck() {
-    const response = await fetchAPI('/health');
-    displayResponse('homeResponse', response);
+    try {
+        const response = await callApi('/health');
+        displayResponse('homeResponse', response);
+    } catch (error) {
+        displayResponse('homeResponse', error.message, true);
+    }
 }
 
+// Lấy danh sách Agent
 async function getAgents() {
-    const response = await fetchAPI('/agents');
-    displayResponse('homeResponse', response);
+    try {
+        const response = await callApi('/agents');
+        displayResponse('homeResponse', response);
+    } catch (error) {
+        displayResponse('homeResponse', error.message, true);
+    }
 }
 
-// Analyze Tab
+// Phân tích số điện thoại
 async function analyzeNumber() {
-    const number = document.getElementById('phoneNumber').value;
-    if (!number) {
-        displayResponse('analyzeResponse', { error: 'Vui lòng nhập số điện thoại' }, true);
-        return;
-    }
-    
-    let endpoint = `/analyze_number?number=${encodeURIComponent(number)}`;
-    
-    const userData = document.getElementById('userData').value;
-    if (userData) {
-        try {
-            JSON.parse(userData); // Kiểm tra JSON hợp lệ
-            endpoint += `&user_data=${encodeURIComponent(userData)}`;
-        } catch (e) {
-            displayResponse('analyzeResponse', { error: 'Dữ liệu người dùng không phải là JSON hợp lệ' }, true);
-            return;
+    try {
+        const phoneNumber = document.getElementById('phoneNumber').value;
+        const userDataStr = document.getElementById('userData').value;
+        
+        if (!phoneNumber) {
+            throw new Error('Vui lòng nhập số điện thoại');
         }
+        
+        let userData = {};
+        if (userDataStr) {
+            try {
+                userData = JSON.parse(userDataStr);
+            } catch (e) {
+                throw new Error('Dữ liệu người dùng không hợp lệ, cần phải là JSON');
+            }
+        }
+        
+        const body = {
+            phone_number: phoneNumber,
+            request_type: "analysis"
+        };
+        
+        if (Object.keys(userData).length > 0) {
+            body.user_data = userData;
+        }
+        
+        const response = await callApi('/api/analyze/phone', 'POST', body, true);
+        displayResponse('analyzeResponse', response);
+    } catch (error) {
+        displayResponse('analyzeResponse', error.message, true);
     }
-    
-    const response = await fetchAPI(endpoint);
-    displayResponse('analyzeResponse', response);
 }
 
-// Chat Tab
+// Lấy lịch sử phân tích số điện thoại
+async function getPhoneAnalysisHistory() {
+    try {
+        if (!config.accessToken()) {
+            throw new Error('Bạn cần đăng nhập để xem lịch sử');
+        }
+        
+        const response = await callApi('/api/analyze/phone/history', 'GET', null, true);
+        displayResponse('analyzeResponse', response);
+    } catch (error) {
+        displayResponse('analyzeResponse', error.message, true);
+    }
+}
+
+// Lấy chi tiết phân tích số điện thoại
+async function getPhoneAnalysisDetail() {
+    try {
+        const phoneNumber = document.getElementById('phoneDetailNumber').value;
+        
+        if (!phoneNumber) {
+            throw new Error('Vui lòng nhập số điện thoại');
+        }
+        
+        if (!config.accessToken()) {
+            throw new Error('Bạn cần đăng nhập để xem chi tiết');
+        }
+        
+        const response = await callApi(`/api/analyze/phone/${encodeURIComponent(phoneNumber)}`, 'GET', null, true);
+        displayResponse('analyzeResponse', response);
+    } catch (error) {
+        displayResponse('analyzeResponse', error.message, true);
+    }
+}
+
+// Chat
 async function sendChat() {
-    const message = document.getElementById('chatMessage').value;
-    if (!message) {
-        displayResponse('chatResponse', { error: 'Vui lòng nhập tin nhắn' }, true);
-        return;
-    }
-    
-    let context = {};
-    const contextValue = document.getElementById('chatContext').value;
-    if (contextValue) {
-        try {
-            context = JSON.parse(contextValue);
-        } catch (e) {
-            displayResponse('chatResponse', { error: 'Context không phải là JSON hợp lệ' }, true);
-            return;
+    try {
+        const message = document.getElementById('chatMessage').value;
+        const contextStr = document.getElementById('chatContext').value;
+        
+        if (!message) {
+            throw new Error('Vui lòng nhập tin nhắn');
         }
-    }
-    
-    const requestBody = {
-        message: message,
-        context: context
-    };
-    
-    const response = await fetchAPI('/api/chat', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
-    });
-    
-    displayResponse('chatResponse', response);
-    
-    // Nếu có session_id, tự động điền vào ô input
-    if (response.metadata && response.metadata.session_id) {
-        document.getElementById('sessionId').value = response.metadata.session_id;
+        
+        let context = {};
+        if (contextStr) {
+            try {
+                context = JSON.parse(contextStr);
+            } catch (e) {
+                throw new Error('Context không hợp lệ, cần phải là JSON');
+            }
+        }
+        
+        const body = {
+            message,
+            context
+        };
+        
+        const response = await callApi('/api/chat', 'POST', body);
+        displayResponse('chatResponse', response);
+    } catch (error) {
+        displayResponse('chatResponse', error.message, true);
     }
 }
-
-let eventSource = null;
 
 async function getChat() {
-    const sessionId = document.getElementById('sessionId').value;
-    if (!sessionId) {
-        displayResponse('chatResponse', { error: 'Vui lòng nhập Session ID' }, true);
-        return;
-    }
-    
-    // Đóng kết nối EventSource cũ nếu có
-    if (eventSource) {
-        eventSource.close();
-    }
-    
-    // Lưu trữ dữ liệu nhận được
-    const chatResponseElement = document.getElementById('chatResponse');
-    chatResponseElement.innerHTML = '<div>Đang kết nối...</div>';
-    
     try {
-        eventSource = new EventSource(`${API_URL}/api/chat?session_id=${encodeURIComponent(sessionId)}`);
+        const sessionId = document.getElementById('sessionId').value;
         
-        eventSource.onmessage = function(event) {
-            try {
-                const data = JSON.parse(event.data);
-                displayResponse('chatResponse', data);
-                
-                if (data.is_final) {
-                    eventSource.close();
-                    eventSource = null;
-                }
-            } catch (error) {
-                console.error('Error parsing event data:', error);
-            }
-        };
-        
-        eventSource.onerror = function(error) {
-            console.error('EventSource error:', error);
-            eventSource.close();
-            eventSource = null;
-            displayResponse('chatResponse', { error: 'Lỗi kết nối stream' }, true);
-        };
-    } catch (error) {
-        console.error('Error setting up EventSource:', error);
-        displayResponse('chatResponse', { error: 'Không thể thiết lập kết nối stream' }, true);
-    }
-}
-
-// Auth Tab
-async function register() {
-    const email = document.getElementById('registerEmail').value;
-    const fullname = document.getElementById('registerFullname').value;
-    const password = document.getElementById('registerPassword').value;
-    
-    if (!email || !fullname || !password) {
-        displayResponse('authResponse', { error: 'Vui lòng điền đầy đủ thông tin' }, true);
-        return;
-    }
-    
-    const requestBody = {
-        email: email,
-        fullname: fullname,
-        password: password
-    };
-    
-    const response = await fetchAPI('/api/user/register', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
-    });
-    
-    displayResponse('authResponse', response);
-}
-
-async function login() {
-    const email = document.getElementById('loginEmail').value;
-    const password = document.getElementById('loginPassword').value;
-    
-    if (!email || !password) {
-        displayResponse('authResponse', { error: 'Vui lòng điền đầy đủ thông tin' }, true);
-        return;
-    }
-    
-    const formData = new FormData();
-    formData.append('username', email);
-    formData.append('password', password);
-    
-    const response = await fetchAPI('/api/user/token', {
-        method: 'POST',
-        body: formData
-    });
-    
-    if (response.access_token) {
-        accessToken = response.access_token;
-        localStorage.setItem('accessToken', accessToken);
-    }
-    
-    displayResponse('authResponse', response);
-}
-
-// User Tab
-async function getUserInfo() {
-    if (!accessToken) {
-        displayResponse('userResponse', { error: 'Vui lòng đăng nhập trước' }, true);
-        return;
-    }
-    
-    const response = await fetchAPI('/api/user/me');
-    displayResponse('userResponse', response);
-}
-
-async function updateUser() {
-    if (!accessToken) {
-        displayResponse('userResponse', { error: 'Vui lòng đăng nhập trước' }, true);
-        return;
-    }
-    
-    const email = document.getElementById('updateEmail').value;
-    const fullname = document.getElementById('updateFullname').value;
-    const password = document.getElementById('updatePassword').value;
-    
-    const requestBody = {};
-    if (email) requestBody.email = email;
-    if (fullname) requestBody.fullname = fullname;
-    if (password) requestBody.password = password;
-    
-    if (Object.keys(requestBody).length === 0) {
-        displayResponse('userResponse', { error: 'Vui lòng nhập ít nhất một thông tin để cập nhật' }, true);
-        return;
-    }
-    
-    const response = await fetchAPI('/api/user/me', {
-        method: 'PUT',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
-    });
-    
-    displayResponse('userResponse', response);
-}
-
-// API Key Tab
-async function createApiKey() {
-    if (!accessToken) {
-        displayResponse('apikeyResponse', { error: 'Vui lòng đăng nhập trước' }, true);
-        return;
-    }
-    
-    const name = document.getElementById('apikeyName').value;
-    if (!name) {
-        displayResponse('apikeyResponse', { error: 'Vui lòng nhập tên API Key' }, true);
-        return;
-    }
-    
-    const requestBody = {
-        name: name
-    };
-    
-    const response = await fetchAPI('/api/apikeys', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
-    });
-    
-    displayResponse('apikeyResponse', response);
-}
-
-async function listApiKeys() {
-    if (!accessToken) {
-        displayResponse('apikeyResponse', { error: 'Vui lòng đăng nhập trước' }, true);
-        return;
-    }
-    
-    const response = await fetchAPI('/api/apikeys');
-    displayResponse('apikeyResponse', response);
-}
-
-async function deleteApiKey() {
-    if (!accessToken) {
-        displayResponse('apikeyResponse', { error: 'Vui lòng đăng nhập trước' }, true);
-        return;
-    }
-    
-    const apiKeyId = document.getElementById('deleteApiKeyId').value;
-    if (!apiKeyId) {
-        displayResponse('apikeyResponse', { error: 'Vui lòng nhập ID API Key' }, true);
-        return;
-    }
-    
-    const response = await fetchAPI(`/api/apikeys/${encodeURIComponent(apiKeyId)}`, {
-        method: 'DELETE'
-    });
-    
-    displayResponse('apikeyResponse', response);
-}
-
-// Payment Tab
-async function listPlans() {
-    const response = await fetchAPI('/api/payment/plans');
-    displayResponse('paymentResponse', response);
-}
-
-async function getPlan() {
-    const planId = document.getElementById('planId').value;
-    if (!planId) {
-        displayResponse('paymentResponse', { error: 'Vui lòng nhập ID gói dịch vụ' }, true);
-        return;
-    }
-    
-    const response = await fetchAPI(`/api/payment/plans/${encodeURIComponent(planId)}`);
-    displayResponse('paymentResponse', response);
-}
-
-async function createPayment() {
-    if (!accessToken) {
-        displayResponse('paymentResponse', { error: 'Vui lòng đăng nhập trước' }, true);
-        return;
-    }
-    
-    const planId = document.getElementById('paymentPlanId').value;
-    const paymentMethod = document.getElementById('paymentMethod').value;
-    const amount = document.getElementById('paymentAmount').value;
-    
-    if (!planId || !paymentMethod || !amount) {
-        displayResponse('paymentResponse', { error: 'Vui lòng điền đầy đủ thông tin' }, true);
-        return;
-    }
-    
-    const requestBody = {
-        plan_id: planId,
-        payment_method: paymentMethod,
-        amount: parseFloat(amount),
-        currency: 'VND'
-    };
-    
-    const response = await fetchAPI('/api/payment', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
-    });
-    
-    displayResponse('paymentResponse', response);
-}
-
-async function getPaymentHistory() {
-    if (!accessToken) {
-        displayResponse('paymentResponse', { error: 'Vui lòng đăng nhập trước' }, true);
-        return;
-    }
-    
-    const response = await fetchAPI('/api/payment/history');
-    displayResponse('paymentResponse', response);
-}
-
-async function getSubscription() {
-    if (!accessToken) {
-        displayResponse('paymentResponse', { error: 'Vui lòng đăng nhập trước' }, true);
-        return;
-    }
-    
-    const response = await fetchAPI('/api/payment/subscription');
-    displayResponse('paymentResponse', response);
-}
-
-// Upload Tab
-async function uploadFile() {
-    const fileInput = document.getElementById('uploadFile');
-    const file = fileInput.files[0];
-    
-    if (!file) {
-        displayResponse('uploadResponse', { error: 'Vui lòng chọn file để upload' }, true);
-        return;
-    }
-    
-    const fileType = document.getElementById('fileType').value;
-    let metadata = document.getElementById('fileMetadata').value;
-    
-    if (metadata) {
-        try {
-            JSON.parse(metadata); // Kiểm tra JSON hợp lệ
-        } catch (e) {
-            displayResponse('uploadResponse', { error: 'Metadata không phải là JSON hợp lệ' }, true);
-            return;
+        if (!sessionId) {
+            throw new Error('Vui lòng nhập Session ID');
         }
+        
+        const response = await callApi(`/api/chat/${sessionId}`);
+        displayResponse('chatResponse', response);
+    } catch (error) {
+        displayResponse('chatResponse', error.message, true);
     }
-    
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('type', fileType);
-    if (metadata) {
-        formData.append('metadata', metadata);
+}
+
+// Đăng ký
+async function register() {
+    try {
+        const email = document.getElementById('registerEmail').value;
+        const password = document.getElementById('registerPassword').value;
+        const fullName = document.getElementById('registerFullName').value;
+        
+        if (!email || !password || !fullName) {
+            throw new Error('Vui lòng điền đủ thông tin');
+        }
+        
+        const body = {
+            email,
+            password,
+            fullName
+        };
+        
+        const response = await callApi('/api/user/register', 'POST', body);
+        displayResponse('authResponse', response);
+    } catch (error) {
+        displayResponse('authResponse', error.message, true);
     }
-    
-    const response = await fetchAPI('/api/upload', {
-        method: 'POST',
-        body: formData
-    });
-    
-    displayResponse('uploadResponse', response);
-} 
+}
+
+// Đăng nhập
+async function login() {
+    try {
+        const email = document.getElementById('loginEmail').value;
+        const password = document.getElementById('loginPassword').value;
+        
+        if (!email || !password) {
+            throw new Error('Vui lòng điền đủ thông tin');
+        }
+        
+        const formData = new FormData();
+        formData.append('username', email);
+        formData.append('password', password);
+        
+        const response = await callApi('/api/user/token', 'POST', formData, false, true);
+        
+        if (response.access_token) {
+            localStorage.setItem('accessToken', response.access_token);
+            displayResponse('authResponse', { message: 'Đăng nhập thành công', ...response });
+        } else {
+            throw new Error('Đăng nhập thất bại');
+        }
+    } catch (error) {
+        displayResponse('authResponse', error.message, true);
+    }
+}
+
+// Đăng xuất
+function logout() {
+    localStorage.removeItem('accessToken');
+    displayResponse('authResponse', 'Đã đăng xuất thành công');
+}
+
+// Lấy thông tin người dùng
+async function getUserInfo() {
+    try {
+        const response = await callApi('/api/user/me', 'GET', null, true);
+        displayResponse('userResponse', response);
+    } catch (error) {
+        displayResponse('userResponse', error.message, true);
+    }
+}
+
+// Cập nhật thông tin người dùng
+async function updateUser() {
+    try {
+        const fullName = document.getElementById('updateFullName').value;
+        const password = document.getElementById('updatePassword').value;
+        
+        if (!fullName && !password) {
+            throw new Error('Vui lòng nhập thông tin cần cập nhật');
+        }
+        
+        const body = {};
+        if (fullName) body.fullName = fullName;
+        if (password) body.password = password;
+        
+        const response = await callApi('/api/user/update', 'PUT', body, true);
+        displayResponse('userResponse', response);
+    } catch (error) {
+        displayResponse('userResponse', error.message, true);
+    }
+}
+
+// Tạo API Key
+async function createApiKey() {
+    try {
+        const description = document.getElementById('apiKeyDescription').value;
+        
+        if (!description) {
+            throw new Error('Vui lòng nhập mô tả cho API Key');
+        }
+        
+        const body = {
+            description
+        };
+        
+        const response = await callApi('/api/apikey/create', 'POST', body, true);
+        displayResponse('apikeyResponse', response);
+    } catch (error) {
+        displayResponse('apikeyResponse', error.message, true);
+    }
+}
+
+// Lấy danh sách API Key
+async function listApiKeys() {
+    try {
+        const response = await callApi('/api/apikey/list', 'GET', null, true);
+        displayResponse('apikeyResponse', response);
+    } catch (error) {
+        displayResponse('apikeyResponse', error.message, true);
+    }
+}
+
+// Xóa API Key
+async function deleteApiKey() {
+    try {
+        const keyId = document.getElementById('deleteKeyId').value;
+        
+        if (!keyId) {
+            throw new Error('Vui lòng nhập API Key ID');
+        }
+        
+        const response = await callApi(`/api/apikey/delete/${keyId}`, 'DELETE', null, true);
+        displayResponse('apikeyResponse', response);
+    } catch (error) {
+        displayResponse('apikeyResponse', error.message, true);
+    }
+}
+
+// Lấy danh sách các gói dịch vụ
+async function listPlans() {
+    try {
+        const response = await callApi('/api/payment/plans', 'GET');
+        displayResponse('paymentResponse', response);
+    } catch (error) {
+        displayResponse('paymentResponse', error.message, true);
+    }
+}
+
+// Lấy thông tin gói dịch vụ
+async function getPlan() {
+    try {
+        const planId = document.getElementById('planId').value;
+        
+        if (!planId) {
+            throw new Error('Vui lòng nhập Plan ID');
+        }
+        
+        const response = await callApi(`/api/payment/plans/${planId}`, 'GET');
+        displayResponse('paymentResponse', response);
+    } catch (error) {
+        displayResponse('paymentResponse', error.message, true);
+    }
+}
+
+// Tạo thanh toán
+async function createPayment() {
+    try {
+        const planId = document.getElementById('paymentPlanId').value;
+        const amount = document.getElementById('paymentAmount').value;
+        const paymentMethod = document.getElementById('paymentMethod').value;
+        
+        if (!planId || !amount || !paymentMethod) {
+            throw new Error('Vui lòng điền đủ thông tin thanh toán');
+        }
+        
+        const body = {
+            planId,
+            amount: parseFloat(amount),
+            paymentMethod
+        };
+        
+        const response = await callApi('/api/payment/create', 'POST', body, true);
+        
+        // Kiểm tra nếu có URL thanh toán VNPay
+        if (response.paymentUrl) {
+            // Mở trang thanh toán trong cửa sổ mới
+            window.open(response.paymentUrl, '_blank');
+        }
+        
+        displayResponse('paymentResponse', response);
+    } catch (error) {
+        displayResponse('paymentResponse', error.message, true);
+    }
+}
+
+// Lấy lịch sử thanh toán
+async function getPaymentHistory() {
+    try {
+        const response = await callApi('/api/payment/history', 'GET', null, true);
+        displayResponse('paymentResponse', response);
+    } catch (error) {
+        displayResponse('paymentResponse', error.message, true);
+    }
+}
+
+// Lấy thông tin gói đăng ký
+async function getSubscription() {
+    try {
+        const response = await callApi('/api/payment/subscription', 'GET', null, true);
+        displayResponse('paymentResponse', response);
+    } catch (error) {
+        displayResponse('paymentResponse', error.message, true);
+    }
+}
+
+// Upload file
+async function uploadFile() {
+    try {
+        const fileInput = document.getElementById('fileInput');
+        
+        if (!fileInput.files || fileInput.files.length === 0) {
+            throw new Error('Vui lòng chọn file');
+        }
+        
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+        
+        const response = await callApi('/api/upload', 'POST', formData, true, true);
+        displayResponse('uploadResponse', response);
+    } catch (error) {
+        displayResponse('uploadResponse', error.message, true);
+    }
+}
+
+// Hiển thị cấu hình hiện tại khi tải trang
+window.onload = function() {
+    const apiUrl = config.apiUrl;
+    document.getElementById('apiBaseUrl').value = apiUrl;
+    document.getElementById('configResponse').innerHTML = `<pre>API URL hiện tại: ${apiUrl}</pre>`;
+}; 
