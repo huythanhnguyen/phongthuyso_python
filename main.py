@@ -393,6 +393,8 @@ def decode_token(token: str) -> Optional[Dict[str, Any]]:
 
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
     """Get current user from token."""
+    from shared_libraries.database.mongodb import db
+    
     payload = decode_token(token)
     if not payload or "sub" not in payload:
         raise HTTPException(
@@ -402,7 +404,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
         )
     
     username = payload.get("sub")
-    user = mock_users.get(username)
+    user = await db.user.find_one({"email": username})
     
     if not user:
         raise HTTPException(
@@ -446,7 +448,10 @@ async def validate_api_key(api_key: str = Header(..., convert_underscores=False)
 @app.post("/api/user/register", response_model=User)
 async def register_user(user: UserCreate):
     """Register a new user."""
-    if user.email in mock_users:
+    # Kiểm tra email đã tồn tại chưa
+    from shared_libraries.database.mongodb import db
+    existing_user = await db.user.find_one({"email": user.email})
+    if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
     
     user_id = str(uuid.uuid4())
@@ -464,7 +469,8 @@ async def register_user(user: UserCreate):
         "quota_remaining": mock_plans["free"]["quota"] 
     }
     
-    mock_users[user.email] = user_data
+    # Lưu vào MongoDB
+    await db.user.insert_one(user_data)
     
     # Create subscription to free plan
     subscription_id = str(uuid.uuid4())
@@ -480,7 +486,9 @@ async def register_user(user: UserCreate):
         "is_active": True,
         "auto_renew": False
     }
-    mock_subscriptions[subscription_id] = subscription_data
+    
+    # Lưu subscription vào MongoDB
+    await db.subscription.insert_one(subscription_data)
     
     return {**user_data, "hashed_password": ""}
 
@@ -488,7 +496,10 @@ async def register_user(user: UserCreate):
 @app.post("/api/user/token", response_model=Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
     """Login to get access token."""
-    user = mock_users.get(form_data.username)
+    from shared_libraries.database.mongodb import db
+    
+    # Tìm user trong MongoDB
+    user = await db.user.find_one({"email": form_data.username})
     if not user or not verify_password(form_data.password, user.get("hashed_password", "")):
         raise HTTPException(
             status_code=401,
@@ -520,27 +531,39 @@ async def update_user(
     current_user: User = Depends(get_current_active_user)
 ):
     """Update user information."""
-    user_data = mock_users[current_user["email"]]
+    from shared_libraries.database.mongodb import db
+    
+    # Lấy user hiện tại từ MongoDB
+    user_data = await db.user.find_one({"email": current_user["email"]})
+    if not user_data:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    update_data = {}
     
     if user_update.fullname:
-        user_data["fullname"] = user_update.fullname
+        update_data["fullname"] = user_update.fullname
     
     if user_update.email and user_update.email != current_user["email"]:
-        if user_update.email in mock_users:
+        # Kiểm tra email mới đã tồn tại chưa
+        existing_user = await db.user.find_one({"email": user_update.email})
+        if existing_user:
             raise HTTPException(status_code=400, detail="Email already registered")
-        
-        # Create new entry with updated email
-        mock_users[user_update.email] = user_data
-        # Delete old entry
-        del mock_users[current_user["email"]]
-        user_data["email"] = user_update.email
+        update_data["email"] = user_update.email
     
     if user_update.password:
-        user_data["hashed_password"] = get_password_hash(user_update.password)
+        update_data["hashed_password"] = get_password_hash(user_update.password)
     
-    user_data["updated_at"] = datetime.now()
+    update_data["updated_at"] = datetime.now()
     
-    return {**user_data, "hashed_password": ""}
+    # Cập nhật trong MongoDB
+    await db.user.update_one(
+        {"email": current_user["email"]},
+        {"$set": update_data}
+    )
+    
+    # Lấy dữ liệu user đã cập nhật
+    updated_user = await db.user.find_one({"email": user_update.email if user_update.email else current_user["email"]})
+    return {**updated_user, "hashed_password": ""}
 
 
 # API Keys endpoints

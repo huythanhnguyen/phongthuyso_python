@@ -67,6 +67,26 @@ async def init_db():
     """Khởi tạo kết nối database khi ứng dụng khởi động"""
     global db
     db = await get_database()
+    
+    # Tạo các collection cần thiết nếu chưa tồn tại
+    collections = await db.list_collection_names()
+    
+    # Collection user
+    if "user" not in collections:
+        logger.info("Tạo collection 'user'...")
+        await db.create_collection("user")
+        # Tạo index cho email để tìm kiếm nhanh và đảm bảo unique
+        await db.user.create_index("email", unique=True)
+        logger.info("Đã tạo collection 'user' thành công")
+    
+    # Collection subscription
+    if "subscription" not in collections:
+        logger.info("Tạo collection 'subscription'...")
+        await db.create_collection("subscription")
+        # Tạo index cho user_id để tìm kiếm nhanh
+        await db.subscription.create_index("user_id")
+        logger.info("Đã tạo collection 'subscription' thành công")
+    
     return db
 
 async def close_connection():
