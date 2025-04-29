@@ -1,7 +1,7 @@
 # Google ADK và AI - Phiên bản cụ thể để đảm bảo tương thích
 google-adk==0.2.0
 google-generativeai==0.4.0
-model-context-protocol>=0.1.0
+# MCP được tích hợp trong google-adk, không cần cài đặt riêng
 
 # Core dependencies
 fastapi>=0.115.0

@@ -208,7 +208,7 @@ class PhoneNumberAgent:
             "luck_level": "Trung bình",
             "last_three_digit_analysis": "Không thể phân tích",
             "last_five_digit_analysis": "Không thể phân tích",
-            "recommendations": ["Không thể đưa ra khuyến nghị do lỗi phân tích."]
+            "recommendations": ["Không thể đưa ra khuyến nghị do lỗi khi phân tích số điện thoại"]
         }
 
     async def suggest_phone(self, purpose: str, preferred_digits: Optional[List[str]] = None) -> List[Dict[str, Any]]:
