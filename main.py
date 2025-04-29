@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import uuid
+import asyncio
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from enum import Enum
@@ -823,17 +824,35 @@ async def post_chat(
         )
 
 
-async def stream_response(session_id: str):
+async def stream_response(session_id: str, message: Optional[str] = None, user_id: Optional[str] = None):
     """Generate streaming responses."""
     try:
-        # Tạo request cho streaming
-        # Trong thực tế, có thể lấy lịch sử chat từ session_id
+        # Sử dụng message từ parameter nếu có
+        default_message = "Phân tích số điện thoại của tôi một cách chi tiết"
+        message = message or default_message
+        
+        # Nếu session_id khác "unknown", cố gắng lấy message từ session
+        if session_id != "unknown" and not message:
+            try:
+                # TODO: Lấy tin nhắn từ session database
+                pass
+            except Exception as e:
+                logger.warning(f"Không thể lấy tin nhắn từ session {session_id}: {e}")
+        
+        # Tạo context với các tham số cần thiết
+        context = {
+            "session_id": session_id,
+            "streaming": True
+        }
+        
+        # Thêm user_id vào context nếu có
+        if user_id:
+            context["user_id"] = user_id
+            
+        # Tạo request
         streaming_request = {
-            "message": "Phân tích số của tôi một cách chi tiết",
-            "context": {
-                "session_id": session_id,
-                "streaming": True
-            }
+            "message": message,
+            "context": context
         }
         
         # Chuẩn bị phản hồi khởi đầu
@@ -845,17 +864,67 @@ async def stream_response(session_id: str):
         }
         yield f"data: {json.dumps(initial_response)}\n\n"
         
-        # Gọi root_agent.process_direct_root_request với streaming=True
-        # Giả định rằng process_direct_root_request có thể trả về generator
-        # trong trường hợp streaming=True
-        streaming_generator = root_agent.stream_response(streaming_request)
+        # Sử dụng process_direct_root_request
+        response = await root_agent.process_direct_root_request(streaming_request)
         
-        async for chunk in streaming_generator:
-            # Định dạng chunk thành streaming event
-            yield f"data: {json.dumps(chunk)}\n\n"
-            # Chờ một chút để mô phỏng xử lý (có thể bỏ trong production)
-            import asyncio
-            await asyncio.sleep(0.1)
+        # Đảm bảo response có đúng format
+        if not isinstance(response, dict):
+            response = {
+                "agent": "Root Agent",
+                "status": "success", 
+                "content": str(response),
+                "metadata": {}
+            }
+        
+        # Lấy nội dung phản hồi để chia thành các phần
+        content = response.get("content", "")
+        if content:
+            # Chia nội dung thành các phần để tạo hiệu ứng streaming
+            # Chia theo câu
+            sentences = [s.strip() for s in content.split(".") if s.strip()]
+            
+            # Nếu không có câu nào, tạo một câu đơn
+            if not sentences:
+                sentences = [content]
+            
+            # Gửi từng câu như một chunk
+            for i, sentence in enumerate(sentences):
+                # Thêm dấu chấm vào cuối câu nếu không phải câu cuối
+                if i < len(sentences) - 1:
+                    sentence += "."
+                
+                # Tạo chunk
+                chunk = {
+                    "agent": response.get("agent", "Root Agent"),
+                    "status": "streaming",
+                    "content": sentence,
+                    "is_final": (i == len(sentences) - 1)
+                }
+                
+                # Gửi chunk
+                yield f"data: {json.dumps(chunk)}\n\n"
+                
+                # Chờ một chút để mô phỏng streaming
+                await asyncio.sleep(0.2)
+            
+            # Gửi phản hồi cuối cùng
+            final_response = {
+                "agent": response.get("agent", "Root Agent"),
+                "status": "success",
+                "content": content,
+                "metadata": response.get("metadata", {}),
+                "is_final": True
+            }
+            yield f"data: {json.dumps(final_response)}\n\n"
+        else:
+            # Nếu không có nội dung, gửi thông báo lỗi
+            error_response = {
+                "agent": "System",
+                "status": "error",
+                "content": "Không nhận được nội dung phản hồi",
+                "is_final": True
+            }
+            yield f"data: {json.dumps(error_response)}\n\n"
             
     except Exception as e:
         logger.exception(f"Error in streaming: {e}")
@@ -880,7 +949,7 @@ async def get_chat(
     # Trong thực tế, có thể thực hiện kiểm tra quota và xác thực
     
     return StreamingResponse(
-        stream_response(session_id),
+        stream_response(session_id, message, user_id),
         media_type="text/event-stream"
     )
 
