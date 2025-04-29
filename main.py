@@ -11,6 +11,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from enum import Enum
+from contextlib import asynccontextmanager
 
 from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Query, Request, UploadFile, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
@@ -51,6 +52,33 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Định nghĩa lifespan context manager
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    logger.info("Starting up Phong Thuy API")
+    
+    # Khởi tạo kết nối MongoDB
+    try:
+        from shared_libraries.database.mongodb import init_db
+        await init_db()
+        logger.info("Đã khởi tạo kết nối MongoDB thành công")
+    except Exception as e:
+        logger.error(f"Lỗi khi khởi tạo kết nối MongoDB: {e}")
+    
+    yield
+    
+    # Shutdown
+    logger.info("Shutting down Phong Thuy API")
+    
+    # Đóng kết nối MongoDB
+    try:
+        from shared_libraries.database.mongodb import close_connection
+        await close_connection()
+        logger.info("Đã đóng kết nối MongoDB thành công")
+    except Exception as e:
+        logger.error(f"Lỗi khi đóng kết nối MongoDB: {e}")
+
 # Tạm thời bỏ qua khởi tạo agent system vì các file cần thiết đang thiếu
 # Khởi tạo hệ thống agent
 # Các agents chính
@@ -74,6 +102,7 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 # Cấu hình CORS
@@ -171,7 +200,7 @@ class User(UserBase):
     quota_remaining: int
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class TokenData(BaseModel):
@@ -945,25 +974,12 @@ async def general_exception_handler(request: Request, exc: Exception):
     )
 
 
-# Startup and shutdown events
-@app.on_event("startup")
-async def startup_event():
-    """Startup event handler."""
-    logger.info("Starting up Phong Thuy API")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Shutdown event handler."""
-    logger.info("Shutting down Phong Thuy API")
-
-
 # For local development
 if __name__ == "__main__":
     import uvicorn
 
     logger.info(f"Starting Phong Thuy API server in {env_mode} mode on port {port}")
-    uvicorn.run(app, host="0.0.0.0", port=port, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
 
 # Payment endpoints
 @app.get("/api/payment/plans", response_model=List[Plan])
