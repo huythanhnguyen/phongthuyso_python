@@ -1,88 +1,120 @@
 """
-Payment Agent Implementation
+Payment Agent Module
 
-Triển khai PaymentAgent - Agent xử lý thanh toán.
+Cung cấp PaymentAgent - agent xử lý các vấn đề thanh toán và gói dịch vụ.
 """
 
-from typing import Any, Dict
+from google.adk.agents import Agent
+from google.adk.tools.agent_tool import AgentTool
+from google.genai.types import GenerateContentConfig
 
-# Corrected imports
-from agents.base_agent import BaseAgent
-from agents.agent_types import AgentType
-from shared_libraries.logger import get_logger
+# Import prompts
+from agents.root_agent.prompts.adk_prompts import PAYMENT_AGENT_INSTR
 
-# Import the sub-agent (relative path is fine here)
-from .sub_agents.subscription_agent import SubscriptionAgent
+# Import tools
+from agents.tools.memory import memorize_tool, recall_tool
+from agents.tools.mongodb_tools import find_user_tool, get_user_subscription_tool
 
-# Import request models
-from shared_libraries.models import (
-    PaymentRequest, # e.g., process_payment, create_checkout_session
-    SubscriptionRequest # e.g., get_status, update_plan
+# Import types
+from shared_libraries import types
+
+# Tạo sub-agents chuyên biệt cho các loại dịch vụ thanh toán
+subscription_agent = Agent(
+    model="gemini-2.0-flash-001",
+    name="subscription_agent",
+    description="Quản lý và tư vấn về các gói dịch vụ Phong Thủy Số",
+    instruction="""
+    Bạn là chuyên gia tư vấn các gói dịch vụ Phong Thủy Số.
+    
+    Nhiệm vụ của bạn:
+    1. Cung cấp thông tin chi tiết về các gói dịch vụ
+    2. So sánh ưu nhược điểm giữa các gói
+    3. Tư vấn gói phù hợp với nhu cầu người dùng
+    4. Giải thích các tính năng và giới hạn của mỗi gói
+    
+    Các gói hiện có:
+    - FREE: 2 lần phân tích số điện thoại/ngày, không có các tính năng khác
+    - BASIC (99.000đ/tháng): 10 lần phân tích số điện thoại/ngày, 5 lần phân tích CCCD
+    - PREMIUM (199.000đ/tháng): Không giới hạn phân tích số điện thoại, 10 lần phân tích CCCD, 5 lần phân tích tài khoản ngân hàng
+    - VIP (399.000đ/tháng): Tất cả tính năng không giới hạn + ưu tiên hỗ trợ
+    
+    Cung cấp thông tin đầy đủ, chính xác và tư vấn phù hợp với nhu cầu của người dùng.
+    """,
+    disallow_transfer_to_parent=True,
+    disallow_transfer_to_peers=True,
+    output_schema=types.SubscriptionInfo,
+    output_key="subscription_info",
+    generate_content_config=types.json_response_config,
 )
 
-# Import payment tools from the correct location
-from tools.payment.payment_tools import create_payment # Example tool
-from tools.payment.subscription_tools import get_user_active_subscription, update_subscription # Corrected import
-
-# Import the prompt string
-from .prompts.system_prompt import SYSTEM_PROMPT
-
-# Tạo một agent kế thừa từ BaseAgent
-class PaymentAgent(BaseAgent):
-    """
-    Payment Agent - Agent xử lý thanh toán và điều phối subscription.
-    """
+quota_agent = Agent(
+    model="gemini-2.0-flash-001",
+    name="quota_agent",
+    description="Kiểm tra và báo cáo quotas của người dùng",
+    instruction="""
+    Bạn là chuyên gia kiểm tra quota sử dụng của người dùng.
     
-    def __init__(self, model_name: str = "gemini-2.0-flash", name: str = "payment_agent"):
-        """
-        Khởi tạo Payment Agent và SubscriptionAgent sub-agent.
-        """
-        self.logger = get_logger(name)
-        instruction = SYSTEM_PROMPT
-        
-        # Instantiate Sub-Agent
-        self.subscription_agent = SubscriptionAgent()
-        
-        # TODO: Define tools for payment processing (e.g., using FunctionTool)
-        # Example tool registration (replace with actual payment methods)
-        # agent_tools = [FunctionTool(self.process_payment)] 
-        agent_tools = [] # No tools defined yet
-        
-        # Gọi constructor của BaseAgent
-        super().__init__(
-            name=name,
-            agent_type=AgentType.PAYMENT,
-            model_name=model_name,
-            instruction=instruction
-        )
+    Nhiệm vụ của bạn:
+    1. Xác định gói dịch vụ hiện tại của người dùng
+    2. Kiểm tra số lần sử dụng còn lại cho mỗi loại dịch vụ
+    3. Đưa ra cảnh báo nếu quota sắp hết
+    4. Tư vấn nâng cấp gói dịch vụ khi cần thiết
+    
+    Cung cấp thông tin chi tiết và chính xác về quota còn lại của người dùng.
+    """,
+    disallow_transfer_to_parent=True,
+    disallow_transfer_to_peers=True,
+    output_schema=types.UserQuota,
+    output_key="user_quota",
+    generate_content_config=types.json_response_config,
+)
 
-    def process_payment_request(self, request: PaymentRequest) -> Dict[str, Any]:
-        """
-        Handles direct payment processing requests.
-        (Placeholder Implementation)
-        """
-        self.logger.info(f"Processing payment request: {request}")
-        # TODO: Implement logic using payment tools (e.g., call Stripe API via create_payment)
-        # result = create_payment(request.user_id, request.payment_data)
-        return {"status": "payment_processed", "transaction_id": "dummy_txn_123"} # Placeholder
-        
-    def process_subscription_request(self, request: SubscriptionRequest) -> Dict[str, Any]:
-        """
-        Routes subscription-related requests to SubscriptionAgent.
-        """
-        self.logger.info(f"Routing subscription request to SubscriptionAgent: {request}")
-        # Example routing based on request type or attributes
-        if hasattr(request, 'user_id') and hasattr(request, 'new_plan_id'):
-            # return self.subscription_agent.update_subscription(request.user_id, request.new_plan_id)
-            return update_subscription(request.user_id, request.new_plan_id) # Call tool directly
-        elif hasattr(request, 'user_id'):
-            # return self.subscription_agent.get_subscription_status(request.user_id)
-            return get_user_active_subscription(request.user_id) # Call tool directly with corrected function name
-        else:
-            self.logger.error(f"Unknown subscription request type: {request}")
-            return {"error": "Unknown subscription request type"}
+payment_processing_agent = Agent(
+    model="gemini-2.0-flash-001",
+    name="payment_processing_agent",
+    description="Xử lý các giao dịch thanh toán",
+    instruction="""
+    Bạn là chuyên gia xử lý thanh toán.
+    
+    Nhiệm vụ của bạn:
+    1. Hướng dẫn quy trình thanh toán
+    2. Giải thích các phương thức thanh toán khả dụng
+    3. Trợ giúp xử lý các vấn đề thanh toán
+    4. Xác nhận trạng thái giao dịch
+    
+    Phương thức thanh toán:
+    - Thẻ tín dụng/ghi nợ
+    - Chuyển khoản ngân hàng
+    - Ví điện tử (MoMo, ZaloPay, VNPay)
+    
+    Đảm bảo hướng dẫn rõ ràng, chi tiết và hỗ trợ người dùng hoàn tất giao dịch.
+    """,
+    disallow_transfer_to_parent=True,
+    disallow_transfer_to_peers=True,
+    output_schema=types.PaymentResult,
+    output_key="payment_result",
+    generate_content_config=types.json_response_config,
+)
 
-    # Other methods related to payment processing, webhook handling etc.
-
-# Tạo instance của PaymentAgent
-# payment_agent = PaymentAgent() # Remove direct instantiation if handled by registry 
+# Tạo Payment agent chính
+payment_agent = Agent(
+    model="gemini-2.0-flash-001",
+    name="payment_agent",
+    description="Agent quản lý thanh toán và gói dịch vụ Phong Thủy Số",
+    instruction=PAYMENT_AGENT_INSTR,
+    tools=[
+        memorize_tool,
+        recall_tool,
+        find_user_tool,
+        get_user_subscription_tool
+    ],
+    sub_agents=[
+        subscription_agent,
+        quota_agent,
+        payment_processing_agent
+    ],
+    generate_content_config=GenerateContentConfig(
+        temperature=0.2,
+        top_p=0.8
+    )
+) 

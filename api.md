@@ -1,539 +1,517 @@
-# API Phong Thuỷ Số
+# API Documentation - Phong Thủy Số
 
-API này cung cấp các endpoint để phân tích phong thủy số và quản lý người dùng.
+## Authentication
 
-## Base URL
-
-```
-http://localhost:8000
-```
-
-## Xác thực
-
-API sử dụng xác thực OAuth2 với JWT token. Để gọi các API yêu cầu xác thực, thêm header sau:
-
-```
-Authorization: Bearer {token}
-```
-
-Bạn có thể lấy token bằng cách gọi API đăng nhập `/api/user/token`.
-
-## API Công khai
-
-### Health Check
-
-Kiểm tra trạng thái hoạt động của API.
-
-```
-GET /health
-```
-
-**Response:**
-
-```json
-{
-  "status": "ok",
-  "timestamp": "2025-04-24T01:10:00Z"
-}
-```
-
-### Lấy danh sách agent
-
-Trả về danh sách các agent có sẵn.
-
-```
-GET /agents
-```
-
-**Response:**
-
-```json
-{
-  "agents": [
-    {
-      "id": "phongthuy_agent",
-      "name": "Phong Thủy Agent",
-      "description": "Phân tích phong thủy số điện thoại"
-    }
-  ]
-}
-```
-
-### Phân tích số điện thoại
-
-Phân tích số điện thoại theo phong thủy.
-
-```
-GET /analyze_number
-```
-
-**Parameters:**
-
-- `number` (required): Số điện thoại cần phân tích
-- `user_data` (optional): Dữ liệu người dùng bổ sung dưới dạng JSON
-
-**Response:**
-
-```json
-{
-  "agent": "phongthuy_agent",
-  "status": "success",
-  "content": "Phân tích chi tiết về số điện thoại",
-  "metadata": {
-    "number": "0912345678",
-    "score": 85,
-    "elements": ["Kim", "Mộc"],
-    "lucky_elements": ["Kim"],
-    "recommendations": ["Phù hợp với người mệnh Kim"]
-  }
-}
-```
-
-## API Chat
-
-### Gửi tin nhắn chat
-
-Gửi tin nhắn để trò chuyện với bot.
-
-```
-POST /api/chat
-```
-
-**Request Body:**
-
-```json
-{
-  "message": "Phân tích số 0912345678",
-  "context": {
-    "user_id": "user123"
-  }
-}
-```
-
-**Response:**
-
-```json
-{
-  "agent": "phongthuy_agent",
-  "status": "success",
-  "content": "Đang phân tích số 0912345678...",
-  "metadata": {
-    "session_id": "sess_123456"
-  },
-  "is_final": false
-}
-```
-
-### Nhận kết quả chat
-
-Nhận kết quả cuối cùng của cuộc trò chuyện.
-
-```
-GET /api/chat?session_id={session_id}
-```
-
-**Parameters:**
-
-- `session_id` (required): ID phiên chat từ response trước đó
-
-**Response:**
-
-```json
-{
-  "agent": "phongthuy_agent",
-  "status": "success",
-  "content": "Số 0912345678 có yếu tố Kim mạnh, phù hợp với người mệnh Kim...",
-  "metadata": {
-    "analysis": {
-      "score": 85,
-      "elements": ["Kim", "Mộc"]
-    }
-  },
-  "is_final": true
-}
-```
-
-## API Người dùng
-
-### Đăng ký người dùng
-
-Đăng ký người dùng mới.
-
-```
-POST /api/user/register
-```
-
-**Request Body:**
-
-```json
-{
-  "email": "user@example.com",
-  "fullname": "Nguyễn Văn A",
-  "password": "your-password"
-}
-```
-
-**Response:**
-
-```json
-{
-  "id": "user_123",
-  "email": "user@example.com",
-  "fullname": "Nguyễn Văn A",
-  "created_at": "2025-04-24T01:10:00Z",
-  "updated_at": "2025-04-24T01:10:00Z",
-  "is_active": true,
-  "is_premium": false,
-  "quota_remaining": 10
-}
-```
+Các API yêu cầu xác thực qua một trong hai cách:
+- JWT Token thông qua Authorization header
+- API Key thông qua api_key header
 
 ### Đăng nhập
-
-Đăng nhập và lấy token truy cập.
-
 ```
 POST /api/user/token
 ```
-
-**Request Body (form data):**
-
-```
-username: user@example.com
-password: your-password
-```
-
-**Response:**
-
+Request:
 ```json
 {
-  "access_token": "eyJhbGci...",
+  "username": "email@example.com",
+  "password": "password"
+}
+```
+Response:
+```json
+{
+  "access_token": "JWT_TOKEN",
   "token_type": "bearer",
   "user": {
-    "id": "user_123",
-    "email": "user@example.com",
-    "fullname": "Nguyễn Văn A",
-    "created_at": "2025-04-24T01:10:00Z",
-    "updated_at": "2025-04-24T01:10:00Z",
-    "is_active": true,
-    "is_premium": false,
-    "quota_remaining": 10
+    "id": "user_id",
+    "name": "User Name",
+    "email": "email@example.com",
+    "role": "user",
+    "isPremium": false,
+    "remainingQuestions": 5,
+    "createdAt": "2023-09-01T00:00:00Z"
   }
 }
 ```
 
-### Lấy thông tin người dùng hiện tại
+### Đăng ký
+```
+POST /api/user/register
+```
+Request:
+```json
+{
+  "name": "User Name",
+  "email": "email@example.com",
+  "password": "password",
+  "phoneNumber": "0987654321"
+}
+```
+Response:
+```json
+{
+  "id": "user_id",
+  "name": "User Name",
+  "email": "email@example.com",
+  "role": "user",
+  "phoneNumber": "0987654321",
+  "remainingQuestions": 5,
+  "isPremium": false,
+  "createdAt": "2023-09-01T00:00:00Z"
+}
+```
 
-Lấy thông tin người dùng đã đăng nhập.
+## Phân tích số điện thoại
 
+### Phân tích số điện thoại
+```
+POST /api/batcuclinh_so/analyze_phone
+```
+Headers:
+```
+Authorization: Bearer YOUR_JWT_TOKEN
+```
+hoặc
+```
+api_key: YOUR_API_KEY
+```
+
+Request:
+```json
+{
+  "phone_number": "0987654321",
+  "request_type": "phone_analysis",
+  "context": {
+    "purpose": "kinh doanh"
+  }
+}
+```
+Response:
+```json
+{
+  "phone_number": "0987654321",
+  "network_code": "098",
+  "subscriber_number": "7654321",
+  "analysis": [
+    {
+      "number": "09",
+      "tinh": "SINH_KHI",
+      "name": "Sinh Khí",
+      "description": "Vui vẻ, quý nhân, dẫn đạo lực",
+      "energy": 3,
+      "position": "Nên ở giữa",
+      "nature": "Cát"
+    },
+    // ... Các cặp số khác
+  ],
+  "combinations": [
+    {
+      "numbers": "09-87",
+      "combination": "SINH_KHI_LUC_SAT",
+      "description": "Quý nhân gặp xung đột",
+      "detailed_description": "..."
+    }
+  ],
+  "total_score": 7.5,
+  "luck_level": "Tốt"
+}
+```
+
+### Lấy lịch sử phân tích
+```
+GET /api/phone-analysis/history?limit=10&skip=0
+```
+Headers:
+```
+Authorization: Bearer YOUR_JWT_TOKEN
+```
+
+Response:
+```json
+[
+  {
+    "_id": "analysis_id",
+    "userId": "user_id",
+    "phoneNumber": "0987654321",
+    "createdAt": "2023-09-01T00:00:00Z",
+    "result": {
+      "total_score": 7.5,
+      "luck_level": "Tốt"
+    }
+  },
+  // ... Các phân tích khác
+]
+```
+
+### Lấy chi tiết phân tích
+```
+GET /api/phone-analysis/{phone_number}
+```
+Headers:
+```
+Authorization: Bearer YOUR_JWT_TOKEN
+```
+
+Response:
+```json
+{
+  "_id": "analysis_id",
+  "userId": "user_id",
+  "phoneNumber": "0987654321",
+  "result": {
+    "phone_number": "0987654321",
+    "network_code": "098",
+    "subscriber_number": "7654321",
+    "analysis": [...],
+    "combinations": [...],
+    "total_score": 7.5,
+    "luck_level": "Tốt"
+  },
+  "geminiResponse": "...",
+  "createdAt": "2023-09-01T00:00:00Z"
+}
+```
+
+## Gợi ý số điện thoại
+```
+GET /analyze_number?number={number}&user_data={user_data_json}
+```
+Headers:
+```
+Authorization: Bearer YOUR_JWT_TOKEN
+```
+hoặc
+```
+api_key: YOUR_API_KEY
+```
+
+Tham số:
+- `number`: Số điện thoại cần phân tích
+- `user_data`: Dữ liệu người dùng bổ sung (JSON string)
+
+Response:
+```json
+{
+  "agent": "BatCucLinhSo Agent",
+  "status": "success",
+  "content": "Phân tích chi tiết số điện thoại...",
+  "metadata": {
+    "score": 7.5,
+    "luck_level": "Tốt",
+    "analysis": {...}
+  }
+}
+```
+
+## Quản lý tài khoản
+
+### Thông tin người dùng
 ```
 GET /api/user/me
 ```
+Headers:
+```
+Authorization: Bearer YOUR_JWT_TOKEN
+```
 
-**Response:**
-
+Response:
 ```json
 {
-  "id": "user_123",
-  "email": "user@example.com",
-  "fullname": "Nguyễn Văn A",
-  "created_at": "2025-04-24T01:10:00Z",
-  "updated_at": "2025-04-24T01:10:00Z",
-  "is_active": true,
-  "is_premium": false,
-  "quota_remaining": 10
+  "id": "user_id",
+  "name": "User Name",
+  "email": "email@example.com",
+  "role": "user",
+  "phoneNumber": "0987654321",
+  "remainingQuestions": 5,
+  "isPremium": false,
+  "createdAt": "2023-09-01T00:00:00Z",
+  "lastLogin": "2023-09-01T00:00:00Z"
 }
 ```
 
 ### Cập nhật thông tin người dùng
-
-Cập nhật thông tin người dùng.
-
 ```
 PUT /api/user/me
 ```
+Headers:
+```
+Authorization: Bearer YOUR_JWT_TOKEN
+```
 
-**Request Body:**
-
+Request:
 ```json
 {
-  "fullname": "Nguyễn Văn B",
-  "email": "userb@example.com"
+  "fullname": "New Name",
+  "email": "new.email@example.com",
+  "password": "new_password"
 }
 ```
 
-**Response:**
-
+Response:
 ```json
 {
-  "id": "user_123",
-  "email": "userb@example.com",
-  "fullname": "Nguyễn Văn B",
-  "created_at": "2025-04-24T01:10:00Z",
-  "updated_at": "2025-04-24T01:15:00Z",
-  "is_active": true,
-  "is_premium": false,
-  "quota_remaining": 10
+  "id": "user_id",
+  "name": "New Name",
+  "email": "new.email@example.com",
+  "role": "user",
+  "phoneNumber": "0987654321",
+  "remainingQuestions": 5,
+  "isPremium": false,
+  "createdAt": "2023-09-01T00:00:00Z",
+  "lastLogin": "2023-09-01T00:00:00Z"
 }
 ```
 
-## API Key
+## API Keys
 
-### Tạo API Key
-
-Tạo API key mới.
-
+### Tạo API key
 ```
 POST /api/apikeys
 ```
+Headers:
+```
+Authorization: Bearer YOUR_JWT_TOKEN
+```
 
-**Request Body:**
-
+Request:
 ```json
 {
-  "name": "Frontend App"
+  "name": "My API Key",
+  "expires_at": "2024-09-01T00:00:00Z"
 }
 ```
 
-**Response:**
-
+Response:
 ```json
 {
-  "id": "key_123",
-  "key": "pk_test_123456",
-  "name": "Frontend App",
-  "created_at": "2025-04-24T01:20:00Z",
-  "expires_at": null,
+  "id": "key_id",
+  "key": "api_key_value",
+  "name": "My API Key",
+  "created_at": "2023-09-01T00:00:00Z",
+  "expires_at": "2024-09-01T00:00:00Z",
   "last_used_at": null,
   "is_active": true
 }
 ```
 
-### Lấy danh sách API Key
-
-Lấy danh sách API key của người dùng.
-
+### Danh sách API keys
 ```
 GET /api/apikeys
 ```
+Headers:
+```
+Authorization: Bearer YOUR_JWT_TOKEN
+```
 
-**Response:**
-
+Response:
 ```json
 [
   {
-    "id": "key_123",
-    "key": "pk_test_123456",
-    "name": "Frontend App",
-    "created_at": "2025-04-24T01:20:00Z",
-    "expires_at": null,
+    "id": "key_id",
+    "key": "api_key_value",
+    "name": "My API Key",
+    "created_at": "2023-09-01T00:00:00Z",
+    "expires_at": "2024-09-01T00:00:00Z",
     "last_used_at": null,
     "is_active": true
   }
 ]
 ```
 
-### Xóa API Key
-
-Xóa API key.
-
+### Xóa API key
 ```
 DELETE /api/apikeys/{api_key_id}
 ```
+Headers:
+```
+Authorization: Bearer YOUR_JWT_TOKEN
+```
 
-**Response:**
-
+Response:
 ```json
 {
   "message": "API key deleted successfully"
 }
 ```
 
-## API Thanh toán
+## Thanh toán và gói dịch vụ
 
-### Lấy danh sách gói dịch vụ
-
-Lấy danh sách các gói dịch vụ có sẵn.
-
+### Danh sách gói
 ```
 GET /api/payment/plans
 ```
 
-**Response:**
-
+Response:
 ```json
 [
   {
-    "id": "plan_free",
-    "name": "Gói Miễn phí",
-    "type": "free",
-    "price": 0,
-    "currency": "VND",
-    "interval": "month",
-    "description": "Dùng thử với số lượt giới hạn",
-    "features": ["Phân tích cơ bản", "10 lượt tra cứu"],
-    "quota": 10,
-    "created_at": "2025-04-24T01:10:00Z",
-    "updated_at": "2025-04-24T01:10:00Z"
-  },
-  {
-    "id": "plan_basic",
-    "name": "Gói Cơ bản",
+    "id": "plan_id",
+    "name": "Gói Cơ Bản",
     "type": "basic",
-    "price": 99000,
+    "price": 100000,
     "currency": "VND",
     "interval": "month",
-    "description": "Phù hợp cho người dùng cá nhân",
-    "features": ["Phân tích đầy đủ", "100 lượt tra cứu", "Hỗ trợ qua email"],
-    "quota": 100,
-    "created_at": "2025-04-24T01:10:00Z",
-    "updated_at": "2025-04-24T01:10:00Z"
+    "description": "Gói cơ bản với 50 lần phân tích mỗi tháng",
+    "features": [
+      "Phân tích số điện thoại",
+      "Lịch sử phân tích"
+    ],
+    "quota": 50,
+    "created_at": "2023-09-01T00:00:00Z",
+    "updated_at": "2023-09-01T00:00:00Z"
   }
 ]
 ```
 
-### Lấy chi tiết gói dịch vụ
-
-Lấy thông tin chi tiết về một gói dịch vụ.
-
+### Chi tiết gói
 ```
 GET /api/payment/plans/{plan_id}
 ```
 
-**Response:**
-
+Response:
 ```json
 {
-  "id": "plan_basic",
-  "name": "Gói Cơ bản",
+  "id": "plan_id",
+  "name": "Gói Cơ Bản",
   "type": "basic",
-  "price": 99000,
+  "price": 100000,
   "currency": "VND",
   "interval": "month",
-  "description": "Phù hợp cho người dùng cá nhân",
-  "features": ["Phân tích đầy đủ", "100 lượt tra cứu", "Hỗ trợ qua email"],
-  "quota": 100,
-  "created_at": "2025-04-24T01:10:00Z",
-  "updated_at": "2025-04-24T01:10:00Z"
+  "description": "Gói cơ bản với 50 lần phân tích mỗi tháng",
+  "features": [
+    "Phân tích số điện thoại",
+    "Lịch sử phân tích"
+  ],
+  "quota": 50,
+  "created_at": "2023-09-01T00:00:00Z",
+  "updated_at": "2023-09-01T00:00:00Z"
 }
 ```
 
 ### Tạo thanh toán
-
-Tạo một thanh toán mới.
-
 ```
 POST /api/payment
 ```
+Headers:
+```
+Authorization: Bearer YOUR_JWT_TOKEN
+```
 
-**Request Body:**
-
+Request:
 ```json
 {
-  "plan_id": "plan_basic",
-  "payment_method": "momo",
-  "amount": 99000,
+  "plan_id": "plan_id",
+  "payment_method": "credit_card",
+  "amount": 100000,
   "currency": "VND"
 }
 ```
 
-**Response:**
-
+Response:
 ```json
 {
-  "id": "payment_123",
-  "user_id": "user_123",
-  "plan_id": "plan_basic",
-  "payment_method": "momo",
-  "amount": 99000,
+  "id": "payment_id",
+  "user_id": "user_id",
+  "plan_id": "plan_id",
+  "payment_method": "credit_card",
+  "amount": 100000,
   "currency": "VND",
-  "status": "pending",
-  "created_at": "2025-04-24T01:25:00Z",
-  "updated_at": "2025-04-24T01:25:00Z",
-  "transaction_id": null
+  "status": "completed",
+  "created_at": "2023-09-01T00:00:00Z",
+  "updated_at": "2023-09-01T00:00:00Z",
+  "transaction_id": "transaction_id"
 }
 ```
 
-### Lấy lịch sử thanh toán
-
-Lấy lịch sử thanh toán của người dùng.
-
+### Lịch sử thanh toán
 ```
 GET /api/payment/history
 ```
+Headers:
+```
+Authorization: Bearer YOUR_JWT_TOKEN
+```
 
-**Response:**
-
+Response:
 ```json
 [
   {
-    "id": "payment_123",
-    "user_id": "user_123",
-    "plan_id": "plan_basic",
-    "payment_method": "momo",
-    "amount": 99000,
+    "id": "payment_id",
+    "user_id": "user_id",
+    "plan_id": "plan_id",
+    "payment_method": "credit_card",
+    "amount": 100000,
     "currency": "VND",
     "status": "completed",
-    "created_at": "2025-04-24T01:25:00Z",
-    "updated_at": "2025-04-24T01:30:00Z",
-    "transaction_id": "tx_momo_123"
+    "created_at": "2023-09-01T00:00:00Z",
+    "updated_at": "2023-09-01T00:00:00Z",
+    "transaction_id": "transaction_id"
   }
 ]
 ```
 
-### Lấy thông tin đăng ký
-
-Lấy thông tin gói đăng ký hiện tại của người dùng.
-
+### Gói đăng ký hiện tại
 ```
 GET /api/payment/subscription
 ```
+Headers:
+```
+Authorization: Bearer YOUR_JWT_TOKEN
+```
 
-**Response:**
-
+Response:
 ```json
 {
-  "id": "sub_123",
-  "user_id": "user_123",
-  "plan_id": "plan_basic",
+  "id": "subscription_id",
+  "user_id": "user_id",
+  "plan_id": "plan_id",
   "status": "active",
-  "start_date": "2025-04-24T01:30:00Z",
-  "end_date": "2025-05-24T01:30:00Z",
-  "created_at": "2025-04-24T01:30:00Z",
-  "updated_at": "2025-04-24T01:30:00Z",
+  "start_date": "2023-09-01T00:00:00Z",
+  "end_date": "2023-10-01T00:00:00Z",
+  "created_at": "2023-09-01T00:00:00Z",
+  "updated_at": "2023-09-01T00:00:00Z",
   "is_active": true,
   "auto_renew": true
 }
 ```
 
-## Upload File
+## Kiểm tra sức khỏe hệ thống
 
-### Upload file
-
-Tải lên file (ảnh hoặc tài liệu).
-
+### Kiểm tra trạng thái
 ```
-POST /api/upload
+GET /health
 ```
 
-**Request Body (form-data):**
-
-```
-file: (binary)
-type: "image"
-metadata: "{\"description\":\"Ảnh mô tả\"}"
-```
-
-**Response:**
-
+Response:
 ```json
 {
-  "filename": "f12345.jpg",
-  "url": "/static/uploads/f12345.jpg",
-  "type": "image",
-  "size": 12345,
-  "metadata": {
-    "description": "Ảnh mô tả"
-  }
+  "status": "ok",
+  "version": "1.0.0",
+  "uptime": 3600
+}
+```
+
+## Danh sách agents
+```
+GET /agents
+```
+
+Response:
+```json
+{
+  "agents": [
+    {
+      "name": "Root Agent",
+      "type": "root",
+      "model": "gemini-2.0-flash",
+      "status": "active"
+    },
+    {
+      "name": "BatCucLinhSo Agent",
+      "type": "bat_cuc_linh_so",
+      "model": "gemini-2.0-flash",
+      "status": "active"
+    }
+  ]
 }
 ``` 

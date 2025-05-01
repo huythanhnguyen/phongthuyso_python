@@ -1,173 +1,51 @@
 """
 Root Agent Module
 
-Cung cấp RootAgent - agent chính của hệ thống, điều phối các yêu cầu đến các agent chuyên biệt.
+Cung cấp RootAgent - agent chính của hệ thống, sử dụng Google ADK để điều phối các yêu cầu.
 """
 
-from typing import Dict, Any, Optional, Type
+from google.adk.agents import Agent
+from google.genai.types import GenerateContentConfig
 
-# Corrected imports
-from agents.agent_types import AgentType
-from agents.base_agent import BaseAgent
-from shared_libraries.logger import get_logger
-# Import specific request models passed from the API layer
-from shared_libraries.models import (
-    BatCucLinhSoRequest, # Union of all BCLS requests
-    PaymentRequest,     # Union of all Payment requests
-    SubscriptionRequest,
-    UserManagementRequest # Union of Auth/Profile/APIKey requests 
-    # ... add other top-level request types if needed
-)
-# Import the prompt string
-from .prompts.system_prompt import SYSTEM_PROMPT
+# Import các prompts
+from .prompts.adk_prompts import ROOT_AGENT_INSTR
 
-# Import agent instances (assuming a registry or direct imports)
-# This is complex, ideally use a registry pattern
-# from .registry import get_agent_instance 
+# Import các sub-agent
+from agents.batcuclinh_so_agent.agent import batcuclinh_so_agent
+from agents.payment_agent.agent import payment_agent
+from agents.user_agent.agent import user_agent
 
-class RootAgent(BaseAgent):
-    """
-    Root Agent - Agent chính của hệ thống.
-    Acts as a dispatcher based on pre-determined target agent and typed request.
-    """
-    
-    def __init__(self, name: str = "Root Agent", model_name: str = "gemini-2.0-flash"):
-        """
-        Khởi tạo RootAgent.
-        Removed agent registration here - should be handled externally.
-        """
-        # Adapt BaseAgent initialization as needed
-        super().__init__(name=name, agent_type=AgentType.ROOT, model_name=model_name, instruction=SYSTEM_PROMPT) 
-        self.logger = get_logger(name)
-        # self.agents registry might be populated externally or passed in
-        self.agents: Dict[AgentType, BaseAgent] = {} 
+# Import các AgentTool thay vì hàm trực tiếp
+from agents.tools.memory import memorize_tool, recall_tool, record_conversation_tool, get_conversation_history_tool, _load_precreated_itinerary
+from agents.tools.mongodb_tools import find_user_tool, find_phone_analysis_tool, save_phone_analysis_tool, get_user_subscription_tool
 
-    def register_agent(self, agent_type: AgentType, agent_instance: BaseAgent):
-        """
-        Registers a specific agent instance. Called externally.
-        """
-        self.logger.info(f"Registering agent: {agent_type.name}")
-        self.agents[agent_type] = agent_instance
-
-    async def route_request(self, target_agent_type: AgentType, request_data: Any) -> Dict[str, Any]:
-        """
-        Routes a pre-validated, typed request to the target agent's processing method.
-        This method is intended to be called by the API layer/router.
+# Tạo root agent
+root_agent = Agent(
+    model="gemini-2.0-flash-001",
+    name="root_agent",
+    description="Agent chính của hệ thống Phong Thủy Số, điều phối các yêu cầu đến các agent chuyên biệt",
+    instruction=ROOT_AGENT_INSTR,
+    tools=[
+        # Memory tools
+        memorize_tool,
+        recall_tool,
+        record_conversation_tool,
+        get_conversation_history_tool,
         
-        Args:
-            target_agent_type (AgentType): The specific agent to handle the request.
-            request_data (Any): The Pydantic model instance for the request.
-            
-        Returns:
-            Dict[str, Any]: Kết quả xử lý từ agent chuyên biệt.
-        """
-        self.logger.info(f"Routing request of type {type(request_data).__name__} to {target_agent_type.name}")
-        
-        target_agent = self.agents.get(target_agent_type)
-        
-        if not target_agent:
-            self.logger.error(f"Target agent {target_agent_type.name} not registered.")
-            return {"error": f"Agent {target_agent_type.name} not available."}
-            
-        # --- Call the appropriate processing method based on agent type --- 
-        try:
-            if target_agent_type == AgentType.BAT_CUC_LINH_SO:
-                # Assuming BatCucLinhSoAgent has a process_request method
-                if hasattr(target_agent, 'process_request') and callable(target_agent.process_request):
-                    # Ensure request_data is the correct type (e.g., BatCucLinhSoRequest union)
-                    return await target_agent.process_request(request_data)
-                else:
-                     raise NotImplementedError(f"{target_agent_type.name} does not have a process_request method.")
-
-            elif target_agent_type == AgentType.PAYMENT:
-                # Assuming PaymentAgent has specific methods based on request type
-                if hasattr(target_agent, 'process_payment_request') and isinstance(request_data, PaymentRequest):
-                    return await target_agent.process_payment_request(request_data)
-                elif hasattr(target_agent, 'process_subscription_request') and isinstance(request_data, SubscriptionRequest):
-                    return await target_agent.process_subscription_request(request_data)
-                else:
-                    raise NotImplementedError(f"No handler for {type(request_data).__name__} in {target_agent_type.name}.")
-
-            elif target_agent_type == AgentType.USER:
-                # UserAgent likely handles requests via specific methods matching API routes
-                # The API layer should call the specific method directly (e.g., UserAgent.login_user)
-                # This route_request might not be the best fit for UserAgent's FastAPI integration.
-                # Returning error here, assuming UserAgent methods are called directly.
-                self.logger.warning(f"Routing to UserAgent via route_request is not standard. Call specific methods directly.")
-                return {"error": "UserAgent methods should be called directly from API routes."}
-            
-            # Add other agent types here (e.g., ROOT for direct processing)
-            elif target_agent_type == AgentType.ROOT:
-                 return await self.process_direct_root_request(request_data)
-                 
-            else:
-                self.logger.error(f"Routing logic not implemented for agent type: {target_agent_type.name}")
-                return {"error": f"Cannot route to agent type: {target_agent_type.name}"}
-
-        except Exception as e:
-            self.logger.exception(f"Error processing request in {target_agent_type.name}: {e}")
-            return {"error": f"An internal error occurred while processing the request in {target_agent_type.name}.", "detail": str(e)}
-
-    async def process_direct_root_request(self, request_data: Any) -> Dict[str, Any]:
-        """
-        Handles requests explicitly targeted at the RootAgent itself.
-        Provides a meaningful response to chat requests rather than just a debug message.
-        """
-        self.logger.info(f"Processing direct request: {request_data}")
-        
-        # Handle chat-style requests (messages with context)
-        if isinstance(request_data, dict) and 'message' in request_data:
-            message = request_data.get('message', '')
-            context = request_data.get('context', {})
-            
-            # Phân tích yêu cầu người dùng để đưa ra phản hồi phù hợp
-            if '0912345678' in message or 'điện thoại' in message.lower():
-                response_content = "Chào bạn! Tôi đang phân tích số điện thoại 0912345678 cho bạn. " \
-                                  "Đây là một số điện thoại có nhiều yếu tố thuận lợi về phong thủy. " \
-                                  "Bộ số này có tổng là 45, theo ngũ hành thì đây là số thuộc Thổ - thể hiện sự vững chắc và ổn định. " \
-                                  "Các cặp số đẹp: 12-34-56-78 tạo thành dãy số tiến có quy luật."
-            elif 'ngũ hành' in message.lower():
-                response_content = "Mối quan hệ giữa ngũ hành và số điện thoại rất quan trọng trong phong thủy:\n" \
-                                  "- Số 1, 2: thuộc Thủy - liên quan đến trí tuệ, giao tiếp\n" \
-                                  "- Số 3, 4: thuộc Mộc - thể hiện sự phát triển, tăng trưởng\n" \
-                                  "- Số 5, 6: thuộc Hỏa - tượng trưng cho niềm vui, sự nhiệt huyết\n" \
-                                  "- Số 7, 8: thuộc Kim - biểu thị tài lộc, sự sang trọng\n" \
-                                  "- Số 0, 9: thuộc Thổ - thể hiện sự vững chắc, ổn định"
-            elif 'may mắn' in message.lower():
-                response_content = "Để xác định số may mắn cho bạn, tôi cần biết thêm thông tin về ngày sinh của bạn. " \
-                                  "Nhưng nói chung, các số thường được coi là may mắn trong phong thủy số học là 6, 8 và 9.\n" \
-                                  "- Số 6: tượng trưng cho sự hanh thông\n" \
-                                  "- Số 8: biểu thị cho sự phát đạt, tiền tài\n" \
-                                  "- Số 9: thể hiện sự trường tồn, bền vững"
-            else:
-                response_content = "Xin chào! Tôi là bot Phong Thủy Số. Tôi có thể giúp bạn phân tích số điện thoại, " \
-                                  "số CCCD, số tài khoản ngân hàng hoặc mật khẩu theo phong thủy. " \
-                                  "Bạn có thể hỏi tôi bất kỳ điều gì liên quan đến các chủ đề này."
-            
-            return {
-                "agent": self.name,
-                "status": "success",
-                "content": response_content,
-                "metadata": context
-            }
-            
-        # For non-chat requests, return a default response
-        return {
-            "agent": self.name,
-            "status": "success",
-            "content": f"Tôi đã nhận yêu cầu của bạn. Vui lòng đặt câu hỏi cụ thể về phong thủy số để tôi có thể giúp đỡ.",
-            "metadata": {}
-        }
-
-    # Removed _determine_agent_type method
-    # Removed old handle_request method
-    # Removed old process_message method (use process_direct_root_request)
-
-# --- Singleton Instantiation --- 
-# This might be better handled by a dependency injection framework or registry
-# root_agent = RootAgent()
-
-# --- Example Usage (External Registration) --- 
-# root_agent.register_agent(AgentType.BAT_CUC_LINH_SO, batcuclinh_so_agent_instance)
-# root_agent.register_agent(AgentType.PAYMENT, payment_agent_instance)
-# root_agent.register_agent(AgentType.USER, user_agent_instance) 
+        # MongoDB tools
+        find_user_tool,
+        find_phone_analysis_tool,
+        save_phone_analysis_tool,
+        get_user_subscription_tool
+    ],
+    sub_agents=[
+        batcuclinh_so_agent,
+        payment_agent,
+        user_agent
+    ],
+    before_agent_callback=_load_precreated_itinerary,
+    generate_content_config=GenerateContentConfig(
+        temperature=0.2,
+        top_p=0.8
+    )
+) 

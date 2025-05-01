@@ -10,7 +10,9 @@ Gói chứa các agent cho hệ thống Phong Thủy Số.
 # from phongthuyso_python.agents.root_agent.agent import root_agent # OLD
 from .base_agent import BaseAgent # Example: if BaseAgent is defined here or needed
 from .agent_types import AgentType # Example
-from .root_agent import RootAgent # Import class, not instance
+
+# Import instances trực tiếp, tránh import classes
+# from .root_agent import RootAgent # Import class, not instance
 # from .batcuclinh_so_agent import BatCucLinhSoAgent
 # from .payment_agent import PaymentAgent
 # from .user_agent import UserAgent
@@ -18,7 +20,7 @@ from .root_agent import RootAgent # Import class, not instance
 __all__ = [
     'BaseAgent', 
     'AgentType',
-    'RootAgent', 
+    # 'RootAgent', 
     # 'BatCucLinhSoAgent', 
     # 'PaymentAgent',
     # 'UserAgent'

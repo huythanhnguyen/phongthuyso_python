@@ -14,33 +14,13 @@ from typing import Any, Dict, List, Optional
 from enum import Enum
 from contextlib import asynccontextmanager
 
-from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Query, Request, UploadFile, Depends, Header
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Query, Request, UploadFile, Depends, Header, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, EmailStr
-
-# Tạm thời bỏ qua các import của agent system vì đang gặp vấn đề
-# Các import này sẽ được khôi phục khi cấu trúc agent được sửa đúng
-# Import Agent System
-from agents.root_agent import RootAgent
-from agents.agent_types import AgentType
-from agents.batcuclinh_so_agent import BatCucLinhSoAgent
-from agents.payment_agent import PaymentAgent
-from agents.user_agent import UserAgent
-
-# Import request/response models from shared_libraries
-from shared_libraries.models import (
-    BatCucLinhSoRequest,
-    PhoneAnalysisRequest,
-    CCCDAnalysisRequest,
-    BankAccountRequest,
-    PasswordRequest,
-    PaymentRequest,
-    SubscriptionRequest
-)
 
 # Khởi tạo các biến môi trường
 env_mode = os.environ.get("ENV_MODE", "dev")
@@ -52,6 +32,114 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+# Mô phỏng agent system nếu không có Google ADK
+# Cấu trúc mô phỏng (Mock)
+class MockAgent:
+    """Mock agent cho môi trường dev"""
+    def __init__(self, name="Mock Agent"):
+        self.name = name
+        self.sub_agents = {}
+        
+    async def route_request(self, target_agent_type=None, request_data=None):
+        """Mô phỏng xử lý request"""
+        return {
+            "agent": self.name,
+            "status": "success",
+            "content": f"Đây là phản hồi mô phỏng từ {self.name}",
+            "metadata": {"request": request_data}
+        }
+        
+    async def process_direct_root_request(self, request_data=None):
+        """Mô phỏng xử lý request trực tiếp"""
+        return {
+            "agent": self.name,
+            "status": "success",
+            "content": f"Đây là phản hồi mô phỏng trực tiếp từ {self.name}",
+            "metadata": {"request": request_data}
+        }
+        
+    def register_agent(self, agent_type, agent):
+        """Đăng ký sub-agent"""
+        self.sub_agents[agent_type] = agent
+        
+# Tạm thời bỏ qua các import của agent system vì đang gặp vấn đề
+# Các import này sẽ được khôi phục khi cấu trúc agent được sửa đúng
+# Import Agent System
+try:
+    # Thử import các agent từ file
+    from agents.root_agent.agent import root_agent
+    from agents.agent_types import AgentType
+    from agents.batcuclinh_so_agent.agent import batcuclinh_so_agent
+    from agents.payment_agent.agent import payment_agent
+    from agents.user_agent.agent import user_agent
+    
+    HAS_REAL_AGENTS = True
+    logger.info("Loaded real agent system")
+except ImportError as e:
+    # Nếu không import được, sử dụng mock agent
+    from agents.agent_types import AgentType
+    
+    # Tạo mock agents
+    root_agent = MockAgent(name="Root Agent")
+    batcuclinh_so_agent = MockAgent(name="BatCucLinhSo Agent")
+    payment_agent = MockAgent(name="Payment Agent")
+    user_agent = MockAgent(name="User Agent")
+    
+    # Đăng ký sub-agent
+    root_agent.register_agent(AgentType.BAT_CUC_LINH_SO, batcuclinh_so_agent)
+    root_agent.register_agent(AgentType.PAYMENT, payment_agent)
+    root_agent.register_agent(AgentType.USER, user_agent)
+    
+    HAS_REAL_AGENTS = False
+    logger.warning(f"Using mock agents due to import error: {e}")
+
+# Import request/response models from shared_libraries
+try:
+    from shared_libraries.models import (
+        BatCucLinhSoRequest,
+        PhoneAnalysisRequest,
+        CCCDAnalysisRequest,
+        BankAccountRequest,
+        PasswordRequest,
+        PaymentRequest,
+        SubscriptionRequest
+    )
+except ImportError:
+    # Tạo các class mô phỏng nếu không import được
+    class BaseRequest(BaseModel):
+        """Lớp cơ sở cho request"""
+        pass
+        
+    class BatCucLinhSoRequest(BaseRequest):
+        """Mô phỏng request BatCucLinhSo"""
+        pass
+        
+    class PhoneAnalysisRequest(BaseRequest):
+        """Mô phỏng request PhoneAnalysis"""
+        phone_number: str
+        
+    class CCCDAnalysisRequest(BaseRequest):
+        """Mô phỏng request CCCDAnalysis"""
+        cccd_number: str
+        
+    class BankAccountRequest(BaseRequest):
+        """Mô phỏng request BankAccount"""
+        account_number: str
+        
+    class PasswordRequest(BaseRequest):
+        """Mô phỏng request Password"""
+        password: str
+        
+    class PaymentRequest(BaseRequest):
+        """Mô phỏng request Payment"""
+        amount: float
+        
+    class SubscriptionRequest(BaseRequest):
+        """Mô phỏng request Subscription"""
+        plan_id: str
+        
+    logger.warning("Using mock request models due to import error")
 
 # Định nghĩa lifespan context manager
 @asynccontextmanager
@@ -80,22 +168,6 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Lỗi khi đóng kết nối MongoDB: {e}")
 
-# Tạm thời bỏ qua khởi tạo agent system vì các file cần thiết đang thiếu
-# Khởi tạo hệ thống agent
-# Các agents chính
-root_agent = RootAgent(name="Root Agent", model_name="gemini-2.0-flash")
-batcuclinh_so_agent = BatCucLinhSoAgent(name="BatCucLinhSo Agent", model_name="gemini-2.0-flash")
-payment_agent = PaymentAgent(name="Payment Agent", model_name="gemini-2.0-flash")
-user_agent = UserAgent(name="User Agent")
-
-# Đăng ký sub-agents với Root Agent
-root_agent.register_agent(AgentType.BAT_CUC_LINH_SO, batcuclinh_so_agent)
-root_agent.register_agent(AgentType.PAYMENT, payment_agent)
-root_agent.register_agent(AgentType.USER, user_agent)
-
-logger.info("Agent system initialized successfully")
-logger.info("Agent system initialization skipped")
-
 # Khởi tạo ứng dụng FastAPI
 app = FastAPI(
     title="Phong Thuy API",
@@ -109,10 +181,11 @@ app = FastAPI(
 # Cấu hình CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=["*"],  # Cho phép tất cả các origin
+    allow_credentials=False,  # Không sử dụng credentials
+    allow_methods=["*"],  # Cho phép tất cả các HTTP methods
+    allow_headers=["*"],  # Cho phép tất cả các headers
+    expose_headers=["*"],  # Expose tất cả các headers
 )
 
 # Thiết lập OAuth2
@@ -424,30 +497,58 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
 
 async def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
     """Check if user is active."""
-    if not current_user.get("is_active", False):
+    # Kiểm tra trường is_active nếu có, nếu không thì mặc định là True
+    if not current_user.get("is_active", True):
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
 
 
 async def validate_api_key(api_key: str = Header(..., convert_underscores=False)) -> Dict[str, Any]:
     """Validate API key."""
-    for key_id, key_data in mock_api_keys.items():
-        if key_data["key"] == api_key and key_data["is_active"]:
+    try:
+        from shared_libraries.database.mongodb import db
+        # Tìm apikey trong database
+        key_data = await db.apikey.find_one({"key": api_key, "is_active": True})
+        
+        if key_data:
             # Cập nhật last_used_at
-            key_data["last_used_at"] = datetime.now()
+            await db.apikey.update_one(
+                {"_id": key_data["_id"]},
+                {"$set": {"last_used_at": datetime.now()}}
+            )
             
             # Kiểm tra xem key đã hết hạn chưa
             if key_data.get("expires_at") and key_data["expires_at"] < datetime.now():
                 raise HTTPException(status_code=401, detail="API key expired")
                 
             # Lấy thông tin user
-            user = mock_users.get(key_data["user_id"])
+            user = await db.user.find_one({"id": key_data["user_id"]})
             if not user or not user.get("is_active", False):
                 raise HTTPException(status_code=401, detail="User not active")
                 
             return key_data
+        
+        # Fallback vào mock_api_keys cho môi trường dev/test
+        for key_id, key_info in mock_api_keys.items():
+            if key_info["key"] == api_key and key_info["is_active"]:
+                # Cập nhật last_used_at
+                key_info["last_used_at"] = datetime.now()
+                
+                # Kiểm tra xem key đã hết hạn chưa
+                if key_info.get("expires_at") and key_info["expires_at"] < datetime.now():
+                    raise HTTPException(status_code=401, detail="API key expired")
+                    
+                # Lấy thông tin user
+                user = mock_users.get(key_info["user_id"])
+                if not user or not user.get("is_active", False):
+                    raise HTTPException(status_code=401, detail="User not active")
+                    
+                return key_info
             
-    raise HTTPException(status_code=401, detail="Invalid API key")
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    except Exception as e:
+        logger.error(f"Error validating API key: {e}")
+        raise HTTPException(status_code=401, detail="Invalid API key")
 
 
 # User endpoints
@@ -455,16 +556,22 @@ async def validate_api_key(api_key: str = Header(..., convert_underscores=False)
 async def register_user(user: UserCreate):
     """Register a new user."""
     from shared_libraries.database.mongodb import db
+    
+    # Hiển thị dữ liệu để debug
+    logger.info(f"Register request data: {user.dict()}")
+    
     existing_user = await db.user.find_one({"email": user.email})
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
+    
     user_id = str(uuid.uuid4())
     hashed_password = get_password_hash(user.password)
+    
     user_data = {
         "id": user_id,
         "name": user.name,
         "email": user.email,
-        "password": hashed_password,
+        "password": hashed_password,  # Lưu password đã hash, không phải password gốc
         "role": "user",
         "phoneNumber": user.phoneNumber,
         "remainingQuestions": mock_plans["free"]["quota"],
@@ -472,8 +579,12 @@ async def register_user(user: UserCreate):
         "createdAt": datetime.now(),
         "lastLogin": None
     }
+    
+    logger.info(f"Creating user with data: {user_data}")
+    
     await db.user.insert_one(user_data)
-    # Tạo subscription như cũ nếu cần
+    
+    # Tạo subscription miễn phí
     subscription_id = str(uuid.uuid4())
     subscription_data = {
         "id": subscription_id,
@@ -487,10 +598,13 @@ async def register_user(user: UserCreate):
         "is_active": True,
         "auto_renew": False
     }
+    
     await db.subscription.insert_one(subscription_data)
+    
     # Trả về user không có password
     user_data_to_return = user_data.copy()
     user_data_to_return.pop("password", None)
+    
     return user_data_to_return
 
 
@@ -499,24 +613,48 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     """Login to get access token."""
     from shared_libraries.database.mongodb import db
     
+    logger.info(f"Login attempt for username: {form_data.username}")
+    
     # Tìm user trong MongoDB
     user = await db.user.find_one({"email": form_data.username})
-    if not user or not verify_password(form_data.password, user.get("hashed_password", "")):
+    
+    if not user:
+        logger.warning(f"User not found: {form_data.username}")
         raise HTTPException(
             status_code=401,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
+    # Kiểm tra password
+    stored_password = user.get("password", "")
+    if not verify_password(form_data.password, stored_password):
+        logger.warning(f"Invalid password for user: {form_data.username}")
+        raise HTTPException(
+            status_code=401,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Cập nhật thời gian đăng nhập gần nhất
+    await db.user.update_one(
+        {"email": form_data.username},
+        {"$set": {"lastLogin": datetime.now()}}
+    )
+    
+    # Tạo access token
     access_token = create_access_token(
         data={"sub": user["email"]},
         expires_delta=60 * 60 * 24 * 30  # 30 days
     )
     
+    # Đảm bảo không trả về password
+    user_without_password = {k: v for k, v in user.items() if k != "password"}
+    
     return {
         "access_token": access_token,
         "token_type": "bearer",
-        "user": {**user, "hashed_password": ""}
+        "user": user_without_password
     }
 
 
@@ -1300,49 +1438,141 @@ async def get_phone_analysis_detail(
 @app.post("/api/batcuclinh_so/analyze_phone")
 async def analyze_phone(
     request: PhoneAnalysisRequest,
+    background_tasks: BackgroundTasks,
     current_user: Optional[User] = Depends(get_current_user),
-    api_key: Optional[str] = Header(None, convert_underscores=False)
+    api_key: Optional[str] = Header(None, convert_underscores=False),
+    response: Response = None
 ):
     """Phân tích số điện thoại sử dụng BatCucLinhSoAgent."""
-    # Kiểm tra xác thực - hoặc thông qua current_user hoặc api_key
-    if not current_user and not api_key:
-        raise HTTPException(
-            status_code=401,
-            detail="Bạn cần đăng nhập hoặc cung cấp API key"
-        )
-    
-    # Xác thực bằng API key nếu không có current_user
-    user = None
-    if not current_user and api_key:
-        try:
-            user = await validate_api_key(api_key)
-        except HTTPException as e:
-            raise e
-    else:
-        user = current_user
-    
-    # Kiểm tra quota nếu cần
-    if user and 'remainingQuestions' in user and user['remainingQuestions'] <= 0 and not user.get('isPremium', False):
-        raise HTTPException(
-            status_code=402,
-            detail="Bạn đã hết số lần phân tích. Vui lòng nâng cấp tài khoản."
-        )
-    
     try:
-        # Gọi trực tiếp đến BatCucLinhSoAgent
-        response = await root_agent.route_request(
-            target_agent_type=AgentType.BAT_CUC_LINH_SO,
-            request_data=request
-        )
+        # Kiểm tra xác thực - hoặc thông qua current_user hoặc api_key
+        user = None
+        if current_user:
+            user = current_user
+        elif api_key:
+            try:
+                user = await validate_api_key(api_key)
+            except HTTPException as e:
+                raise e
         
-        # Giảm quota nếu cần
-        if user and 'remainingQuestions' in user and not user.get('isPremium', False):
-            user['remainingQuestions'] -= 1
+        if not user:
+            raise HTTPException(
+                status_code=401,
+                detail="Bạn cần đăng nhập hoặc cung cấp API key"
+            )
+    
+        # Kiểm tra quota nếu cần
+        if user and 'remainingQuestions' in user and user['remainingQuestions'] <= 0 and not user.get('isPremium', False):
+            raise HTTPException(
+                status_code=402,
+                detail="Bạn đã hết số lần phân tích. Vui lòng nâng cấp tài khoản."
+            )
         
-        return response
+        # Chuẩn hóa số điện thoại, loại bỏ khoảng trắng và ký tự đặc biệt
+        phone_number = "".join(char for char in request.phone_number if char.isdigit())
+        
+        # Kiểm tra định dạng số điện thoại
+        if not phone_number or len(phone_number) < 9 or len(phone_number) > 12:
+            raise HTTPException(
+                status_code=400,
+                detail="Định dạng số điện thoại không hợp lệ. Số điện thoại phải có từ 9-12 chữ số."
+            )
+        
+        try:
+            from tools.batcuclinhso_analysis.phone_analysis_db import get_cached_phone_analysis
+            
+            # Kiểm tra cache trước khi phân tích
+            cached_result = await get_cached_phone_analysis(user["id"], phone_number)
+            if cached_result:
+                if response:
+                    response.headers["X-Cache"] = "HIT"
+                logger.info(f"Cache hit for phone analysis: {phone_number}")
+                return cached_result["result"]
+            
+            if response:
+                response.headers["X-Cache"] = "MISS"
+            logger.info(f"Cache miss for phone analysis: {phone_number}")
+            
+        except Exception as e:
+            logger.warning(f"Lỗi khi kiểm tra cache: {e}")
+            # Tiếp tục xử lý nếu có lỗi với cache
+    
+        try:
+            # Gọi trực tiếp đến BatCucLinhSoAgent
+            response_data = await root_agent.route_request(
+                target_agent_type=AgentType.BAT_CUC_LINH_SO,
+                request_data=request
+            )
+            
+            # Lưu kết quả vào database trong background
+            from tools.batcuclinhso_analysis.phone_analysis_db import save_phone_analysis
+            
+            background_tasks.add_task(
+                save_phone_analysis, 
+                user_id=user["id"], 
+                phone_number=phone_number, 
+                analysis_result=response_data,
+                gemini_response=response_data.get("geminiResponse", None)
+            )
+            
+            # Giảm quota nếu cần
+            if user and 'remainingQuestions' in user and not user.get('isPremium', False):
+                user['remainingQuestions'] -= 1
+                
+                # Cập nhật quota trong database
+                background_tasks.add_task(
+                    update_user_quota,
+                    user_id=user["id"],
+                    remaining_questions=user['remainingQuestions']
+                )
+            
+            return response_data
+            
+        except Exception as e:
+            logger.exception(f"Lỗi khi phân tích số điện thoại: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Lỗi khi phân tích số điện thoại: {str(e)}"
+            )
+            
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.exception(f"Lỗi khi phân tích số điện thoại: {str(e)}")
+        logger.exception(f"Lỗi không xác định khi phân tích số điện thoại: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=f"Lỗi khi phân tích số điện thoại: {str(e)}"
+            detail=f"Lỗi không xác định: {str(e)}"
         ) 
+
+# Hàm cập nhật quota người dùng
+async def update_user_quota(user_id: str, remaining_questions: int = None):
+    """Cập nhật số lượng câu hỏi còn lại của người dùng."""
+    try:
+        if not user_id:
+            logger.warning("Không thể cập nhật quota: Thiếu user_id")
+            return
+
+        # Import db từ shared_libraries 
+        from shared_libraries.database.mongodb import db
+            
+        # Nếu không chỉ định remaining_questions, giảm đi 1
+        update_data = {}
+        if remaining_questions is not None:
+            update_data["remainingQuestions"] = remaining_questions
+        else:
+            # Sử dụng $inc để giảm giá trị an toàn
+            update_data = {"$inc": {"remainingQuestions": -1}}
+        
+        # Cập nhật trong database
+        result = await db.user.update_one(
+            {"_id": user_id},
+            {"$set": update_data} if remaining_questions is not None else update_data
+        )
+        
+        if result.modified_count == 0:
+            logger.warning(f"Không thể cập nhật quota cho user {user_id}")
+        else:
+            logger.debug(f"Đã cập nhật quota cho user {user_id}: remaining={remaining_questions}")
+            
+    except Exception as e:
+        logger.error(f"Lỗi khi cập nhật quota người dùng: {e}") 

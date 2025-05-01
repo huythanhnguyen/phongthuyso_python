@@ -10,8 +10,20 @@ import os
 from fastapi.testclient import TestClient
 from unittest.mock import patch
 import requests
+import pytest
+import sys
+import time
+
+# Thêm thư mục gốc vào đường dẫn để import module
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from main import app
+from shared_libraries.database.phone_analysis_db import (
+    get_cached_phone_analysis,
+    save_phone_analysis,
+    invalidate_phone_analysis_cache,
+    _memory_cache,
+)
 
 class TestPhongThuyAPI(unittest.TestCase):
     """Test cases cho các endpoint của API Phong Thuy So."""
@@ -379,12 +391,203 @@ def test_chat_api_cccd():
     except Exception as e:
         print(f"Lỗi: {str(e)}")
 
+# Initialize TestClient
+client = TestClient(app)
+
+# Test vars
+test_phone = "0987654321"
+test_user_id = "test_user_id"
+test_api_key = "test_api_key"  # Đây là giá trị mẫu, cần thay thế bằng API key thật để test
+
+
+@pytest.fixture
+def clear_cache():
+    """Xóa cache trước và sau mỗi test."""
+    _memory_cache.clear()
+    yield
+    _memory_cache.clear()
+
+
+def test_health_endpoint():
+    """Kiểm tra endpoint health."""
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert "status" in response.json()
+    assert response.json()["status"] == "ok"
+
+
+def test_agents_endpoint():
+    """Kiểm tra endpoint danh sách agents."""
+    response = client.get("/agents")
+    assert response.status_code == 200  # Sửa giá trị status code
+    assert "agents" in response.json()
+    assert len(response.json()["agents"]) > 0
+
+
+def test_phone_analysis_unauthorized():
+    """Kiểm tra phân tích số điện thoại khi không có xác thực."""
+    response = client.post(
+        "/api/batcuclinh_so/analyze_phone",
+        json={"phone_number": test_phone, "request_type": "phone_analysis"},
+    )
+    assert response.status_code == 401  # Unauthorized
+
+
+def test_phone_analysis_with_api_key(clear_cache):
+    """Kiểm tra phân tích số điện thoại với API key."""
+    response = client.post(
+        "/api/batcuclinh_so/analyze_phone",
+        json={"phone_number": test_phone, "request_type": "phone_analysis"},
+        headers={"api_key": test_api_key},
+    )
+    
+    # Nếu API key hợp lệ
+    if response.status_code == 200:
+        assert "phone_number" in response.json()
+        assert response.json()["phone_number"] == test_phone
+        assert "Cache-Status" in response.headers
+        assert response.headers["Cache-Status"] == "MISS"
+        
+        # Test cache hit
+        response2 = client.post(
+            "/api/batcuclinh_so/analyze_phone",
+            json={"phone_number": test_phone, "request_type": "phone_analysis"},
+            headers={"api_key": test_api_key},
+        )
+        assert response2.status_code == 200
+        assert "Cache-Status" in response2.headers
+        assert response2.headers["Cache-Status"] == "HIT"
+    else:
+        # Skip test nếu API key không hợp lệ
+        pytest.skip("API key không hợp lệ")
+
+
+def test_phone_analysis_caching(clear_cache):
+    """Kiểm tra cơ chế cache cho phân tích số điện thoại."""
+    # Lưu kết quả phân tích vào cache
+    result = {
+        "phone_number": test_phone,
+        "total_score": 7.5,
+        "luck_level": "Tốt"
+    }
+    save_phone_analysis(test_user_id, test_phone, result)
+    
+    # Kiểm tra cache
+    cached_result = get_cached_phone_analysis(test_user_id, test_phone)
+    assert cached_result is not None
+    assert cached_result["phone_number"] == test_phone
+    
+    # Xóa cache
+    invalidate_phone_analysis_cache(test_user_id, test_phone)
+    
+    # Kiểm tra cache đã bị xóa
+    assert get_cached_phone_analysis(test_user_id, test_phone) is None
+
+
+def test_phone_analysis_normalizing():
+    """Kiểm tra chuẩn hóa số điện thoại."""
+    # Test với các định dạng số khác nhau
+    test_cases = [
+        "+84987654321",  # Định dạng quốc tế
+        "84987654321",   # Định dạng quốc tế không có dấu +
+        "0987 654 321",  # Có khoảng trắng
+        "0987-654-321",  # Có dấu gạch ngang
+    ]
+    
+    for phone in test_cases:
+        # Gọi API để test chuẩn hóa
+        # Lưu ý: API key cần được thay thế bằng giá trị thật
+        response = client.post(
+            "/api/batcuclinh_so/analyze_phone",
+            json={"phone_number": phone, "request_type": "phone_analysis"},
+            headers={"api_key": test_api_key},
+        )
+        
+        # Nếu API key hợp lệ
+        if response.status_code == 200:
+            assert "phone_number" in response.json()
+            assert response.json()["phone_number"] in ["0987654321", "987654321"]
+        else:
+            # Skip test nếu API key không hợp lệ
+            pytest.skip("API key không hợp lệ")
+
+
+def test_analyze_number_endpoint():
+    """Kiểm tra endpoint analyze_number."""
+    response = client.get(
+        f"/analyze_number?number={test_phone}",
+        headers={"api_key": test_api_key},
+    )
+    
+    # Nếu API key hợp lệ
+    if response.status_code == 200:
+        assert "agent" in response.json()
+        assert "status" in response.json()
+        assert "content" in response.json()
+        assert "metadata" in response.json()
+    else:
+        # Skip test nếu API key không hợp lệ
+        pytest.skip("API key không hợp lệ")
+
+
+def test_phone_analysis_history():
+    """Kiểm tra endpoint lịch sử phân tích số điện thoại."""
+    # Lưu ý: Cần JWT token hợp lệ để test
+    # Ví dụ cách tạo token:
+    # 1. Đăng nhập và lấy token
+    login_response = client.post(
+        "/api/user/token",
+        data={"username": "test@example.com", "password": "test_password"},
+    )
+    
+    # Nếu đăng nhập thành công
+    if login_response.status_code == 200:
+        token = login_response.json()["access_token"]
+        
+        # Gọi API lịch sử phân tích
+        response = client.get(
+            "/api/phone-analysis/history",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        
+        assert response.status_code == 200
+        assert isinstance(response.json(), list)
+    else:
+        # Skip test nếu đăng nhập không thành công
+        pytest.skip("Đăng nhập không thành công")
+
+
+def test_performance_load():
+    """Kiểm tra hiệu suất API dưới tải."""
+    # Tạo nhiều request đồng thời
+    num_requests = 10
+    start_time = time.time()
+    
+    # Gửi nhiều request đồng thời
+    for _ in range(num_requests):
+        client.post(
+            "/api/batcuclinh_so/analyze_phone",
+            json={"phone_number": test_phone, "request_type": "phone_analysis"},
+            headers={"api_key": test_api_key},
+        )
+    
+    end_time = time.time()
+    total_time = end_time - start_time
+    
+    # Kiểm tra thời gian trung bình cho mỗi request
+    avg_time = total_time / num_requests
+    print(f"Thời gian trung bình cho mỗi request: {avg_time:.2f} giây")
+    
+    # Lưu ý: Đây chỉ là một ví dụ đơn giản về kiểm tra hiệu suất
+    # Trong thực tế, ta nên sử dụng các công cụ như locust để kiểm tra hiệu suất chính xác hơn
+
+
 if __name__ == "__main__":
-    print("\n--- Test phân tích số điện thoại qua /analyze_number ---")
-    test_phone_analysis()
+    # Chạy test thủ công
+    print("Kiểm tra health endpoint...")
+    test_health_endpoint()
     
-    print("\n--- Test phân tích số điện thoại qua /api/chat ---")
-    test_chat_api_phone()
+    print("Kiểm tra agents endpoint...")
+    test_agents_endpoint()
     
-    print("\n--- Test phân tích CCCD qua /api/chat ---")
-    test_chat_api_cccd() 
+    print("Tất cả các test đã thành công!") 

@@ -212,6 +212,47 @@ class PhoneAnalysis(BaseModel):
         }
 
 
+class ChatMessage(BaseModel):
+    """Model tin nhắn trong cuộc trò chuyện"""
+    content: str
+    role: str = "user"  # user, assistant, system
+    timestamp: Optional[datetime] = None
+    message_id: Optional[str] = None
+    
+    @validator('timestamp', pre=True, always=True)
+    def set_timestamp(cls, v):
+        return v or datetime.utcnow()
+
+
+class ChatContext(BaseModel):
+    """Model context của cuộc trò chuyện"""
+    conversation_id: Optional[str] = None
+    messages: List[ChatMessage] = []
+    user_id: Optional[str] = None
+    conversation_state: Optional[Dict[str, Any]] = {}
+    user_preferences: Optional[Dict[str, Any]] = {}
+    last_analysis: Optional[Dict[str, Any]] = None
+    
+    def dict(self):
+        return {
+            "conversation_id": self.conversation_id,
+            "messages": [msg.dict() for msg in self.messages],
+            "user_id": self.user_id,
+            "conversation_state": self.conversation_state,
+            "user_preferences": self.user_preferences,
+            "last_analysis": self.last_analysis
+        }
+
+
+class AnalysisResult(BaseModel):
+    """Model kết quả phân tích"""
+    analysis_type: str  # phone, cccd, bank_account, password
+    result: Dict[str, Any]
+    score: Optional[float] = None
+    recommendations: List[str] = []
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
 # Định nghĩa index khi được sử dụng trong MongoDB
 # db.phoneAnalysis.createIndex({ userId: 1, phoneNumber: 1 })
 # db.phoneAnalysis.createIndex({ createdAt: -1 }) 

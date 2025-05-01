@@ -130,16 +130,45 @@ async function analyzeNumber() {
             }
         }
         
-        const body = {
-            phone_number: phoneNumber,
-            request_type: "analysis"
-        };
-        
+        // Sử dụng query string để gửi yêu cầu đến endpoint GET /analyze_number
+        let queryString = `?number=${encodeURIComponent(phoneNumber)}`;
         if (Object.keys(userData).length > 0) {
-            body.user_data = userData;
+            queryString += `&user_data=${encodeURIComponent(JSON.stringify(userData))}`;
         }
         
-        const response = await callApi('/api/analyze/phone', 'POST', body, true);
+        const response = await callApi(`/analyze_number${queryString}`, 'GET', null, config.accessToken() ? true : false);
+        displayResponse('analyzeResponse', response);
+    } catch (error) {
+        displayResponse('analyzeResponse', error.message, true);
+    }
+}
+
+// Phân tích số điện thoại với BatCucLinhSoAgent
+async function analyzeBatCucLinhSo() {
+    try {
+        const phoneNumber = document.getElementById('phoneNumber').value;
+        const userDataStr = document.getElementById('userData').value;
+        
+        if (!phoneNumber) {
+            throw new Error('Vui lòng nhập số điện thoại');
+        }
+        
+        let userData = {};
+        if (userDataStr) {
+            try {
+                userData = JSON.parse(userDataStr);
+            } catch (e) {
+                throw new Error('Dữ liệu người dùng không hợp lệ, cần phải là JSON');
+            }
+        }
+        
+        const body = {
+            phone_number: phoneNumber,
+            request_type: "analysis",
+            user_data: userData
+        };
+        
+        const response = await callApi('/api/batcuclinh_so/analyze_phone', 'POST', body, config.accessToken() ? true : false);
         displayResponse('analyzeResponse', response);
     } catch (error) {
         displayResponse('analyzeResponse', error.message, true);
@@ -153,7 +182,7 @@ async function getPhoneAnalysisHistory() {
             throw new Error('Bạn cần đăng nhập để xem lịch sử');
         }
         
-        const response = await callApi('/api/analyze/phone/history', 'GET', null, true);
+        const response = await callApi('/api/phone-analysis/history', 'GET', null, true);
         displayResponse('analyzeResponse', response);
     } catch (error) {
         displayResponse('analyzeResponse', error.message, true);
@@ -173,7 +202,7 @@ async function getPhoneAnalysisDetail() {
             throw new Error('Bạn cần đăng nhập để xem chi tiết');
         }
         
-        const response = await callApi(`/api/analyze/phone/${encodeURIComponent(phoneNumber)}`, 'GET', null, true);
+        const response = await callApi(`/api/phone-analysis/${encodeURIComponent(phoneNumber)}`, 'GET', null, true);
         displayResponse('analyzeResponse', response);
     } catch (error) {
         displayResponse('analyzeResponse', error.message, true);
@@ -204,23 +233,54 @@ async function sendChat() {
             context
         };
         
-        const response = await callApi('/api/chat', 'POST', body);
+        const response = await callApi('/api/chat', 'POST', body, config.accessToken() ? true : false);
         displayResponse('chatResponse', response);
     } catch (error) {
         displayResponse('chatResponse', error.message, true);
     }
 }
 
+// Lấy chat streaming
 async function getChat() {
     try {
         const sessionId = document.getElementById('sessionId').value;
+        const messageElement = document.getElementById('streamMessage');
+        const message = messageElement ? messageElement.value : '';
         
         if (!sessionId) {
             throw new Error('Vui lòng nhập Session ID');
         }
         
-        const response = await callApi(`/api/chat/${sessionId}`);
-        displayResponse('chatResponse', response);
+        let queryString = `?session_id=${encodeURIComponent(sessionId)}`;
+        if (message) {
+            queryString += `&message=${encodeURIComponent(message)}`;
+        }
+        
+        // Thông báo rằng đây là stream
+        displayResponse('chatResponse', 'Đang nhận dữ liệu streaming...');
+        
+        // Sử dụng EventSource để nhận streaming response
+        const eventSource = new EventSource(`${config.apiUrl}/api/chat${queryString}`);
+        
+        eventSource.onmessage = function(event) {
+            try {
+                const data = JSON.parse(event.data);
+                displayResponse('chatResponse', data);
+                
+                // Nếu là response cuối cùng, đóng kết nối
+                if (data.is_final) {
+                    eventSource.close();
+                }
+            } catch (e) {
+                displayResponse('chatResponse', `Lỗi khi xử lý dữ liệu: ${e.message}`, true);
+                eventSource.close();
+            }
+        };
+        
+        eventSource.onerror = function(error) {
+            displayResponse('chatResponse', `Lỗi kết nối stream: ${error.message || 'Unknown error'}`, true);
+            eventSource.close();
+        };
     } catch (error) {
         displayResponse('chatResponse', error.message, true);
     }
@@ -231,16 +291,19 @@ async function register() {
     try {
         const email = document.getElementById('registerEmail').value;
         const password = document.getElementById('registerPassword').value;
-        const fullName = document.getElementById('registerFullName').value;
+        const name = document.getElementById('registerFullName').value;
+        const phoneElement = document.getElementById('registerPhone');
+        const phoneNumber = phoneElement ? phoneElement.value : '';
         
-        if (!email || !password || !fullName) {
+        if (!email || !password || !name) {
             throw new Error('Vui lòng điền đủ thông tin');
         }
         
         const body = {
+            name,
             email,
             password,
-            fullName
+            phoneNumber
         };
         
         const response = await callApi('/api/user/register', 'POST', body);
@@ -296,18 +359,21 @@ async function getUserInfo() {
 // Cập nhật thông tin người dùng
 async function updateUser() {
     try {
-        const fullName = document.getElementById('updateFullName').value;
+        const fullname = document.getElementById('updateFullName').value;
+        const emailElement = document.getElementById('updateEmail');
+        const email = emailElement ? emailElement.value : '';
         const password = document.getElementById('updatePassword').value;
         
-        if (!fullName && !password) {
+        if (!fullname && !password && !email) {
             throw new Error('Vui lòng nhập thông tin cần cập nhật');
         }
         
         const body = {};
-        if (fullName) body.fullName = fullName;
+        if (fullname) body.fullname = fullname;
+        if (email) body.email = email;
         if (password) body.password = password;
         
-        const response = await callApi('/api/user/update', 'PUT', body, true);
+        const response = await callApi('/api/user/me', 'PUT', body, true);
         displayResponse('userResponse', response);
     } catch (error) {
         displayResponse('userResponse', error.message, true);
@@ -317,17 +383,17 @@ async function updateUser() {
 // Tạo API Key
 async function createApiKey() {
     try {
-        const description = document.getElementById('apiKeyDescription').value;
+        const name = document.getElementById('apiKeyName').value;
         
-        if (!description) {
-            throw new Error('Vui lòng nhập mô tả cho API Key');
+        if (!name) {
+            throw new Error('Vui lòng nhập tên cho API Key');
         }
         
         const body = {
-            description
+            name
         };
         
-        const response = await callApi('/api/apikey/create', 'POST', body, true);
+        const response = await callApi('/api/apikeys', 'POST', body, true);
         displayResponse('apikeyResponse', response);
     } catch (error) {
         displayResponse('apikeyResponse', error.message, true);
@@ -337,7 +403,7 @@ async function createApiKey() {
 // Lấy danh sách API Key
 async function listApiKeys() {
     try {
-        const response = await callApi('/api/apikey/list', 'GET', null, true);
+        const response = await callApi('/api/apikeys', 'GET', null, true);
         displayResponse('apikeyResponse', response);
     } catch (error) {
         displayResponse('apikeyResponse', error.message, true);
@@ -347,13 +413,13 @@ async function listApiKeys() {
 // Xóa API Key
 async function deleteApiKey() {
     try {
-        const keyId = document.getElementById('deleteKeyId').value;
+        const keyId = document.getElementById('deleteApiKeyId').value;
         
         if (!keyId) {
             throw new Error('Vui lòng nhập API Key ID');
         }
         
-        const response = await callApi(`/api/apikey/delete/${keyId}`, 'DELETE', null, true);
+        const response = await callApi(`/api/apikeys/${keyId}`, 'DELETE', null, true);
         displayResponse('apikeyResponse', response);
     } catch (error) {
         displayResponse('apikeyResponse', error.message, true);
@@ -398,12 +464,13 @@ async function createPayment() {
         }
         
         const body = {
-            planId,
+            plan_id: planId,
+            payment_method: paymentMethod,
             amount: parseFloat(amount),
-            paymentMethod
+            currency: "VND"
         };
         
-        const response = await callApi('/api/payment/create', 'POST', body, true);
+        const response = await callApi('/api/payment', 'POST', body, true);
         
         // Kiểm tra nếu có URL thanh toán VNPay
         if (response.paymentUrl) {
@@ -440,7 +507,9 @@ async function getSubscription() {
 // Upload file
 async function uploadFile() {
     try {
-        const fileInput = document.getElementById('fileInput');
+        const fileInput = document.getElementById('uploadFile');
+        const fileType = document.getElementById('fileType').value;
+        const metadataStr = document.getElementById('fileMetadata').value;
         
         if (!fileInput.files || fileInput.files.length === 0) {
             throw new Error('Vui lòng chọn file');
@@ -449,7 +518,20 @@ async function uploadFile() {
         const formData = new FormData();
         formData.append('file', fileInput.files[0]);
         
-        const response = await callApi('/api/upload', 'POST', formData, true, true);
+        if (fileType) {
+            formData.append('type', fileType);
+        }
+        
+        if (metadataStr) {
+            try {
+                JSON.parse(metadataStr); // Kiểm tra nếu là JSON hợp lệ
+                formData.append('metadata', metadataStr);
+            } catch (e) {
+                throw new Error('Metadata không hợp lệ, cần phải là JSON');
+            }
+        }
+        
+        const response = await callApi('/api/upload', 'POST', formData, config.accessToken() ? true : false, true);
         displayResponse('uploadResponse', response);
     } catch (error) {
         displayResponse('uploadResponse', error.message, true);
@@ -461,4 +543,18 @@ window.onload = function() {
     const apiUrl = config.apiUrl;
     document.getElementById('apiBaseUrl').value = apiUrl;
     document.getElementById('configResponse').innerHTML = `<pre>API URL hiện tại: ${apiUrl}</pre>`;
+    
+    // Kiểm tra nếu đã đăng nhập
+    const token = config.accessToken();
+    if (token) {
+        const authStatusElement = document.getElementById('authStatus');
+        if (authStatusElement) {
+            authStatusElement.innerHTML = '<div class="alert alert-success">Đã đăng nhập</div>';
+        }
+    } else {
+        const authStatusElement = document.getElementById('authStatus');
+        if (authStatusElement) {
+            authStatusElement.innerHTML = '<div class="alert alert-warning">Chưa đăng nhập</div>';
+        }
+    }
 }; 

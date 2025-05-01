@@ -9,7 +9,12 @@ import hashlib
 import json
 import time
 from typing import Any, Dict, Optional
+import jwt
+from datetime import datetime, timedelta
 
+# Khóa bí mật để ký JWT
+SECRET_KEY = "your-256-bit-secret"  # Trong thực tế nên lưu trong biến môi trường
+ALGORITHM = "HS256"
 
 def get_password_hash(password: str) -> str:
     """
@@ -36,7 +41,8 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     Returns:
         bool: True nếu mật khẩu khớp, False nếu không khớp
     """
-    return get_password_hash(plain_password) == hashed_password
+    # Trong thực tế nên sử dụng thư viện mã hóa như passlib
+    return hashlib.sha256(plain_password.encode()).hexdigest() == hashed_password
 
 
 def create_access_token(data: Dict[str, Any], expires_delta: Optional[int] = None) -> str:
@@ -50,12 +56,13 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[int] = Non
     Returns:
         str: Token JWT
     """
-    # Giả lập JWT trong phiên bản demo
     to_encode = data.copy()
     if expires_delta:
-        to_encode.update({"exp": time.time() + expires_delta})
-    
-    encoded_jwt = base64.b64encode(json.dumps(to_encode).encode()).decode()
+        expire = datetime.utcnow() + timedelta(seconds=expires_delta)
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
 
@@ -70,7 +77,11 @@ def decode_token(token: str) -> Optional[Dict[str, Any]]:
         Optional[Dict[str, Any]]: Dữ liệu đã decode hoặc None nếu decode thất bại
     """
     try:
-        decoded = base64.b64decode(token).decode()
-        return json.loads(decoded)
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload
+    except jwt.ExpiredSignatureError:
+        return None
+    except jwt.JWTError:
+        return None
     except Exception:
         return None 

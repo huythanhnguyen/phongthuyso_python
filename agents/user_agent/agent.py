@@ -1,215 +1,126 @@
 """
-User Agent Implementation
+User Agent Module
 
-Triển khai UserAgent - Agent quản lý thông tin người dùng.
+Cung cấp UserAgent - agent xử lý các vấn đề về tài khoản người dùng.
 """
 
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+from google.adk.agents import Agent
+from google.adk.tools.agent_tool import AgentTool
+from google.genai.types import GenerateContentConfig
 
-from fastapi import Depends, HTTPException, Header
-from fastapi.security import OAuth2PasswordBearer
+# Import prompts
+from agents.root_agent.prompts.adk_prompts import USER_AGENT_INSTR
 
-from agents.agent_types import AgentType
-from agents.base_agent import BaseAgent
-from .models import (
-    ApiKey, ApiKeyCreate, Token, TokenData, User, UserCreate, UserUpdate
+# Import tools
+from agents.tools.memory import memorize_tool, recall_tool
+from agents.tools.mongodb_tools import find_user_tool
+
+# Import types
+from shared_libraries import types
+
+# Tạo sub-agents chuyên biệt cho các tác vụ quản lý tài khoản
+registration_agent = Agent(
+    model="gemini-2.0-flash-001",
+    name="registration_agent",
+    description="Đăng ký tài khoản mới cho người dùng",
+    instruction="""
+    Bạn là chuyên gia đăng ký tài khoản người dùng.
+    
+    Nhiệm vụ của bạn:
+    1. Hướng dẫn người dùng đăng ký tài khoản mới
+    2. Kiểm tra thông tin đăng ký hợp lệ
+    3. Xác nhận email người dùng
+    4. Thiết lập tài khoản ban đầu
+    
+    Quy trình đăng ký:
+    - Yêu cầu email, tên hiển thị và mật khẩu
+    - Kiểm tra định dạng email và độ mạnh của mật khẩu
+    - Tạo tài khoản và gửi email xác nhận
+    - Hoàn tất quá trình thiết lập
+    
+    Đảm bảo hướng dẫn chi tiết và rõ ràng để người dùng có thể dễ dàng đăng ký.
+    """,
+    disallow_transfer_to_parent=True,
+    disallow_transfer_to_peers=True,
+    output_schema=types.UserProfile,
+    output_key="user_profile",
+    generate_content_config=types.json_response_config,
 )
-from tools.user.auth_tools import (
-    create_access_token, decode_token, verify_password
+
+login_agent = Agent(
+    model="gemini-2.0-flash-001",
+    name="login_agent",
+    description="Hỗ trợ người dùng đăng nhập",
+    instruction="""
+    Bạn là chuyên gia hỗ trợ đăng nhập tài khoản.
+    
+    Nhiệm vụ của bạn:
+    1. Hướng dẫn người dùng đăng nhập
+    2. Xử lý các vấn đề đăng nhập thường gặp
+    3. Hỗ trợ khôi phục tài khoản
+    4. Giải quyết các vấn đề xác thực
+    
+    Các tình huống thường gặp:
+    - Quên mật khẩu
+    - Tài khoản bị khóa
+    - Không nhận được email xác nhận
+    - Vấn đề về xác thực hai yếu tố
+    
+    Cung cấp hướng dẫn chi tiết, rõ ràng và đảm bảo bảo mật thông tin người dùng.
+    """,
+    disallow_transfer_to_parent=True,
+    disallow_transfer_to_peers=True,
+    output_schema=types.LoginResult,
+    output_key="login_result",
+    generate_content_config=types.json_response_config,
 )
-from tools.user.user_tools import (
-    create_user, get_user_by_email 
+
+api_key_agent = Agent(
+    model="gemini-2.0-flash-001",
+    name="api_key_agent",
+    description="Quản lý API keys cho người dùng",
+    instruction="""
+    Bạn là chuyên gia quản lý API keys.
+    
+    Nhiệm vụ của bạn:
+    1. Hướng dẫn tạo API key mới
+    2. Quản lý các API key hiện có
+    3. Hướng dẫn sử dụng API key
+    4. Xử lý vấn đề liên quan đến API key
+    
+    Quy trình quản lý:
+    - Tạo API key mới với phạm vi truy cập thích hợp
+    - Hiển thị danh sách API key hiện có
+    - Hướng dẫn cách tích hợp API key vào ứng dụng
+    - Xóa hoặc vô hiệu hóa API key khi cần
+    
+    Đảm bảo cung cấp thông tin chi tiết và ưu tiên bảo mật.
+    """,
+    disallow_transfer_to_parent=True,
+    disallow_transfer_to_peers=True,
+    output_schema=types.APIKey,
+    output_key="api_key",
+    generate_content_config=types.json_response_config,
 )
-from shared_libraries.logger import get_logger
 
-from .sub_agents.profile_agent import ProfileAgent
-from .sub_agents.apikey_agent import APIKeyAgent
-
-# Import the prompt string
-from .prompts.system_prompt import SYSTEM_PROMPT
-
-# OAuth2 scheme
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/user/token")
-
-
-# Tạo một agent kế thừa từ BaseAgent
-class UserAgent(BaseAgent):
-    """
-    User Agent - Quản lý người dùng, xác thực và điều phối profile/API keys.
-    """
-    
-    def __init__(self, name: str = "User Agent"):
-        """
-        Khởi tạo User Agent và các sub-agent.
-        """
-        # Pass the imported SYSTEM_PROMPT to BaseAgent
-        # Adapt BaseAgent init signature if needed (e.g., if it expects model_name)
-        super().__init__(
-            name=name, 
-            agent_type=AgentType.USER,
-            instruction=SYSTEM_PROMPT
-        ) 
-        self.logger = get_logger(name)
-        
-        # Instantiate Sub-Agents
-        self.profile_agent = ProfileAgent()
-        self.apikey_agent = APIKeyAgent()
-        
-        self.logger.info("UserAgent initialized with ProfileAgent and APIKeyAgent.")
-
-    # --- Authentication Methods --- 
-    async def register_user(self, user_create: UserCreate) -> Dict[str, Any]:
-        """
-        Đăng ký người dùng mới.
-        """
-        self.logger.info(f"Registering new user: {user_create.email}")
-        # Uses the create_user tool
-        user_data = create_user(user_create)
-        return user_data
-    
-    async def login_user(self, username: str, password: str) -> Token:
-        """
-        Đăng nhập người dùng.
-        """
-        self.logger.info(f"Attempting login for user: {username}")
-        # Uses get_user_by_email and verify_password tools
-        user = get_user_by_email(username)
-        if not user or not verify_password(password, user.get("hashed_password", "")):
-            self.logger.warning(f"Login failed for user: {username}")
-            raise HTTPException(
-                status_code=401,
-                detail="Incorrect username or password",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        
-        self.logger.info(f"Login successful for user: {username}")
-        # Uses create_access_token tool
-        access_token = create_access_token(
-            data={"sub": user["email"], "user_id": user.get("id")}, # Include user_id if available/needed
-            expires_delta=60 * 60 * 24 * 30  # 30 days
-        )
-        
-        # Return user info without sensitive data
-        user_info = {k: v for k, v in user.items() if k != 'hashed_password'}
-        return {
-            "access_token": access_token,
-            "token_type": "bearer",
-            "user": user_info 
-        }
-    
-    async def get_current_user(self, token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
-        """
-        FastAPI Dependency: Lấy thông tin người dùng hiện tại từ token.
-        """
-        # Uses decode_token and get_user_by_email tools
-        payload = decode_token(token)
-        if not payload or "sub" not in payload:
-            raise HTTPException(
-                status_code=401,
-                detail="Invalid authentication credentials",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        
-        username = payload.get("sub")
-        user = get_user_by_email(username)
-        
-        if not user:
-            raise HTTPException(
-                status_code=401,
-                detail="User not found",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        
-        # Return user info without sensitive data
-        user_info = {k: v for k, v in user.items() if k != 'hashed_password'}
-        return user_info
-    
-    async def get_current_active_user(
-        self, current_user: Dict[str, Any] = Depends(get_current_user)
-    ) -> Dict[str, Any]:
-        """
-        FastAPI Dependency: Lấy người dùng đang hoạt động.
-        """
-        # This depends on the output of get_current_user
-        if not current_user.get("is_active", False):
-            raise HTTPException(status_code=400, detail="Inactive user")
-        return current_user
-
-    # --- Routing to ProfileAgent --- 
-    async def update_user_profile(self, email: str, user_update: UserUpdate, 
-                                  current_user: Dict[str, Any] = Depends(get_current_active_user)
-                                 ) -> Dict[str, Any]:
-        """
-        Endpoint Logic: Cập nhật hồ sơ người dùng (đã xác thực).
-        """
-        # Authorization check: User can only update their own profile
-        if current_user.get("email") != email:
-             raise HTTPException(status_code=403, detail="Not authorized to update this user profile")
-             
-        # Delegate to ProfileAgent
-        return await self.profile_agent.update_user_profile(email, user_update)
-
-    async def get_user_profile(self, email: str, 
-                               current_user: Dict[str, Any] = Depends(get_current_active_user)
-                              ) -> Dict[str, Any]:
-        """
-        Endpoint Logic: Lấy hồ sơ người dùng (đã xác thực).
-        """
-         # Authorization check: User can only get their own profile (or implement admin logic)
-        if current_user.get("email") != email:
-             raise HTTPException(status_code=403, detail="Not authorized to view this user profile")
-        
-        # Delegate to ProfileAgent (using placeholder implementation for now)
-        return await self.profile_agent.get_user_profile(email)
-        
-    # --- Routing to APIKeyAgent --- 
-    async def create_api_key(self, api_key_create: ApiKeyCreate,
-                             current_user: Dict[str, Any] = Depends(get_current_active_user)
-                            ) -> Dict[str, Any]:
-        """
-        Endpoint Logic: Tạo API key mới cho người dùng hiện tại.
-        """
-        user_id = current_user.get("id") # Assuming user_id is in the token/user object
-        if not user_id:
-             raise HTTPException(status_code=400, detail="User ID not found for API key creation")
-             
-        return await self.apikey_agent.create_api_key_for_user(user_id, api_key_create)
-
-    async def get_api_keys(self, current_user: Dict[str, Any] = Depends(get_current_active_user)
-                          ) -> List[Dict[str, Any]]:
-        """
-        Endpoint Logic: Lấy danh sách API key của người dùng hiện tại.
-        """
-        user_id = current_user.get("id")
-        if not user_id:
-             raise HTTPException(status_code=400, detail="User ID not found")
-        return await self.apikey_agent.list_api_keys_for_user(user_id)
-
-    async def delete_api_key(self, key_id: str, 
-                             current_user: Dict[str, Any] = Depends(get_current_active_user)
-                            ) -> Dict[str, str]:
-        """
-        Endpoint Logic: Xóa API key của người dùng hiện tại.
-        """
-        user_id = current_user.get("id")
-        if not user_id:
-             raise HTTPException(status_code=400, detail="User ID not found")
-        # The apikey_agent method uses the user_id to ensure ownership before deleting
-        return await self.apikey_agent.delete_api_key_for_user(key_id, user_id)
-        
-    # --- API Key Validation (delegated, potentially used as dependency) ---
-    async def validate_api_key(self, api_key: str = Header(None, alias="X-API-Key", convert_underscores=False)
-         ) -> Optional[Dict[str, Any]]:
-         """
-         FastAPI Dependency: Validates API key from header via APIKeyAgent.
-         Raises HTTPException 401 if invalid/missing.
-         """
-         # Delegate to the dependency-like method in APIKeyAgent
-         return await self.apikey_agent.get_validated_key_from_header(api_key)
-    
-    # Removed original process_message method, as agent interaction 
-    # is likely handled via specific methods/routes now.
-
-# Create an instance of the UserAgent
-# user_agent = UserAgent() # Remove direct instantiation if handled by registry 
+# Tạo User agent chính
+user_agent = Agent(
+    model="gemini-2.0-flash-001",
+    name="user_agent",
+    description="Agent quản lý tài khoản người dùng Phong Thủy Số",
+    instruction=USER_AGENT_INSTR,
+    tools=[
+        memorize_tool,
+        recall_tool,
+        find_user_tool
+    ],
+    sub_agents=[
+        registration_agent,
+        login_agent,
+        api_key_agent
+    ],
+    generate_content_config=GenerateContentConfig(
+        temperature=0.2,
+        top_p=0.8
+    )
+) 
